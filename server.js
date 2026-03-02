@@ -1,5 +1,5 @@
 import http from "http";
-import { timingSafeEqual } from "crypto";
+import { randomUUID, timingSafeEqual } from "crypto";
 import { readFileSync } from "fs";
 import { readFile, stat } from "fs/promises";
 import path from "path";
@@ -18,6 +18,15 @@ import {
   resolveQueryNormalizationDefault,
   resolveQueryNormalizationPreference
 } from "./src/search/query-normalizer.js";
+import {
+  ExtractorError,
+  attachExtractorEligibility,
+  buildExtractionCacheKey,
+  getEligibleExtractors,
+  listExtractorCatalog,
+  runExtractor
+} from "./src/extractors/registry.js";
+import { normalizeOutputFormat, rowsToCsvBuffer, sha256Hex } from "./src/extractors/helpers.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,8 +60,21 @@ const SEARCH_RATE_LIMIT_WINDOW_MS = parsePositiveInt(process.env.SEARCH_RATE_LIM
 const SEARCH_RATE_LIMIT_MAX_REQUESTS = parsePositiveInt(process.env.SEARCH_RATE_LIMIT_MAX_REQUESTS, 20);
 const SEARCH_RATE_LIMIT_BLOCK_MS = parsePositiveInt(process.env.SEARCH_RATE_LIMIT_BLOCK_MS, 300000);
 const SEARCH_RATE_LIMIT_MAX_KEYS = parsePositiveInt(process.env.SEARCH_RATE_LIMIT_MAX_KEYS, 10000);
+const EXTRACT_CACHE_TTL_MS = parsePositiveInt(
+  process.env.EXTRACT_CACHE_TTL_MS,
+  7 * 24 * 60 * 60 * 1000
+);
+const EXTRACT_CACHE_MAX_ENTRIES = parsePositiveInt(process.env.EXTRACT_CACHE_MAX_ENTRIES, 300);
+const EXTRACT_JOB_TTL_MS = parsePositiveInt(process.env.EXTRACT_JOB_TTL_MS, 2 * 24 * 60 * 60 * 1000);
+const EXTRACT_LINK_CATALOG_TTL_MS = parsePositiveInt(
+  process.env.EXTRACT_LINK_CATALOG_TTL_MS,
+  24 * 60 * 60 * 1000
+);
 const searchResponseCache = new Map();
 const searchRateLimitState = new Map();
+const extractResultCache = new Map();
+const extractJobStore = new Map();
+const extractLinkCatalogStore = new Map();
 let redisClient = null;
 let redisConnectPromise = null;
 let redisLastConnectFailureAt = 0;
@@ -118,6 +140,13 @@ const server = http.createServer(async (req, res) => {
           version: QUERY_NORMALIZATION_VERSION,
           allowPerRequestToggle: true
         },
+        extractors: {
+          enabled: true,
+          catalog: listExtractorCatalog(),
+          cacheTtlMs: EXTRACT_CACHE_TTL_MS,
+          linkCatalogTtlMs: EXTRACT_LINK_CATALOG_TTL_MS,
+          outputFormats: ["csv", "xlsx"]
+        },
         cache: {
           enabled: CACHE_TTL_MS > 0,
           ttlMs: CACHE_TTL_MS,
@@ -132,6 +161,32 @@ const server = http.createServer(async (req, res) => {
 
     if (requestUrl.pathname === "/api/search" && req.method === "POST") {
       return handleSearch(req, res);
+    }
+
+    if (requestUrl.pathname === "/api/extractors/catalog" && req.method === "GET") {
+      return respondJson(res, 200, { extractors: listExtractorCatalog() });
+    }
+
+    if (requestUrl.pathname === "/api/extractors/eligibility" && req.method === "GET") {
+      const url = String(requestUrl.searchParams.get("url") || "").trim();
+      if (!url) {
+        return respondJson(res, 400, { error: "Query parameter 'url' is required." });
+      }
+
+      return respondJson(res, 200, {
+        url,
+        extractors: getEligibleExtractors({ url })
+      });
+    }
+
+    if (requestUrl.pathname === "/api/extract/run" && req.method === "POST") {
+      return handleExtractRun(req, res);
+    }
+
+    const extractJobMatch = requestUrl.pathname.match(/^\/api\/extract\/jobs\/([^/]+)\/(data|manifest)$/);
+    if (extractJobMatch && req.method === "GET") {
+      const [, jobId, artifactType] = extractJobMatch;
+      return serveExtractJobArtifact(res, jobId, artifactType);
     }
 
     if (req.method === "GET") {
@@ -223,12 +278,13 @@ async function handleSearch(req, res) {
   if (cachedEntry) {
     const cachedMetadata = cachedEntry.metadata || {};
     const cachedNormalization = cachedMetadata.queryNormalization || summarizeNormalization(queryNormalization);
+    const preparedResults = attachExtractorEligibility(cachedEntry.results);
     return respondJson(res, 200, {
       query,
       normalizedQuery: searchQuery,
       timestamp: new Date().toISOString(),
       provider: provider.name,
-      results: cachedEntry.results,
+      results: preparedResults,
       metadata: {
         ...cachedMetadata,
         requestedCostMode: cachedMetadata.requestedCostMode || requestedCostConfig.mode,
@@ -313,8 +369,9 @@ async function handleSearch(req, res) {
         initialMetadata.providerRequestLimit + escalatedMetadata.providerRequestLimit;
     }
 
+    const preparedResults = attachExtractorEligibility(selectedOutput.results);
     await setCachedSearch(cacheKey, {
-      results: selectedOutput.results,
+      results: preparedResults,
       metadata: mergedMetadata
     });
 
@@ -323,7 +380,7 @@ async function handleSearch(req, res) {
       normalizedQuery: searchQuery,
       timestamp: new Date().toISOString(),
       provider: provider.name,
-      results: selectedOutput.results,
+      results: preparedResults,
       metadata: mergedMetadata
     });
   } catch (error) {
@@ -338,6 +395,159 @@ async function handleSearch(req, res) {
 
     return respondJson(res, 500, { error: "Search pipeline failed." });
   }
+}
+
+async function handleExtractRun(req, res) {
+  let payload;
+  try {
+    payload = await readJsonBody(req);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return respondJson(res, 413, {
+        error: "Request body too large.",
+        maxBytes: MAX_REQUEST_BODY_BYTES
+      });
+    }
+    return respondJson(res, 400, { error: "Invalid JSON body." });
+  }
+
+  const sourceId = String(payload?.sourceId || "").trim();
+  const sourceUrl = String(payload?.sourceUrl || payload?.url || "").trim();
+  const outputFormat = normalizeOutputFormat(payload?.outputFormat);
+  const query = String(payload?.query || "").trim();
+  const parameters = isPlainObject(payload?.parameters) ? payload.parameters : {};
+
+  if (!sourceId) {
+    return respondJson(res, 400, { error: "sourceId is required." });
+  }
+  if (!sourceUrl) {
+    return respondJson(res, 400, { error: "sourceUrl is required." });
+  }
+
+  const cacheKey = buildExtractionCacheKey({
+    sourceId,
+    url: sourceUrl,
+    outputFormat,
+    parameters
+  });
+  const cachedExtraction = getCachedExtractionResult(cacheKey);
+  if (cachedExtraction) {
+    const jobId = saveExtractJob(cachedExtraction);
+    return respondJson(res, 200, buildExtractRunResponse({
+      jobId,
+      cached: true,
+      result: cachedExtraction
+    }));
+  }
+
+  try {
+    const result = await runExtractor({
+      sourceId,
+      url: sourceUrl,
+      query,
+      outputFormat,
+      parameters,
+      env: process.env,
+      fetchImpl: fetch,
+      caches: {
+        linkCatalogStore: extractLinkCatalogStore,
+        linkCatalogTtlMs: EXTRACT_LINK_CATALOG_TTL_MS
+      }
+    });
+
+    if (!Array.isArray(result.rows) || result.rows.length === 0) {
+      return respondJson(res, 404, { error: "Extractor returned no rows for the selected parameters." });
+    }
+
+    const dataBuffer = rowsToCsvBuffer(result.rows);
+    const runId = randomUUID();
+    const runTimestamp = new Date().toISOString();
+    const fileName = buildExtractDataFileName({
+      sourceId: result.source,
+      outputFormat,
+      runTimestamp
+    });
+    const manifest = {
+      run_id: runId,
+      run_timestamp: runTimestamp,
+      source: result.source,
+      source_url: result.sourceUrl,
+      method: result.method,
+      parameters: result.parameters,
+      request_details: result.requestDetails,
+      license_or_terms_url: result.licenseOrTermsUrl,
+      hashes: {
+        sha256: sha256Hex(dataBuffer)
+      }
+    };
+    const manifestBuffer = Buffer.from(JSON.stringify(manifest, null, 2), "utf8");
+
+    const extractionPayload = {
+      runId,
+      runTimestamp,
+      source: result.source,
+      sourceUrl: result.sourceUrl,
+      fileName,
+      outputFormat,
+      rowCount: result.rows.length,
+      dataBuffer,
+      manifest,
+      manifestBuffer
+    };
+
+    setCachedExtractionResult(cacheKey, extractionPayload);
+    const jobId = saveExtractJob(extractionPayload);
+
+    return respondJson(res, 200, buildExtractRunResponse({
+      jobId,
+      cached: false,
+      result: extractionPayload
+    }));
+  } catch (error) {
+    if (error instanceof ExtractorError) {
+      return respondJson(res, Number(error.statusCode || 500), {
+        error: error.message,
+        details: error.details || null
+      });
+    }
+
+    return respondJson(res, 500, { error: "Extraction failed unexpectedly." });
+  }
+}
+
+function buildExtractRunResponse({ jobId, cached, result }) {
+  return {
+    jobId,
+    cached,
+    runId: result.runId,
+    runTimestamp: result.runTimestamp,
+    source: result.source,
+    sourceUrl: result.sourceUrl,
+    outputFormat: result.outputFormat,
+    rowCount: result.rowCount,
+    dataDownloadUrl: `/api/extract/jobs/${jobId}/data`,
+    manifestDownloadUrl: `/api/extract/jobs/${jobId}/manifest`
+  };
+}
+
+function serveExtractJobArtifact(res, jobId, artifactType) {
+  const job = getExtractJob(jobId);
+  if (!job) {
+    return respondJson(res, 404, { error: "Extraction job not found or expired." });
+  }
+
+  if (artifactType === "manifest") {
+    const fileName = buildManifestFileName(job.fileName);
+    return respondBufferWithDisposition(
+      res,
+      200,
+      job.manifestBuffer,
+      "application/json; charset=utf-8",
+      fileName
+    );
+  }
+
+  return respondBufferWithDisposition(res, 200, job.dataBuffer, "text/csv; charset=utf-8", job.fileName);
 }
 
 async function serveStatic(requestPath, res) {
@@ -397,6 +607,7 @@ function buildSetupSteps() {
     "Create a .env file in the project root.",
     "Add one key: BRAVE_API_KEY, or SERPAPI_KEY, or BING_API_KEY.",
     "Optional query normalization: NORMALIZE_QUERY=true (default false).",
+    "Optional extract cache controls: EXTRACT_CACHE_TTL_MS and EXTRACT_LINK_CATALOG_TTL_MS.",
     "Optional API protection: APP_BASIC_AUTH_USER and APP_BASIC_AUTH_PASS.",
     "Optional cost controls: SEARCH_COST_MODE=economy|standard and SEARCH_MAX_PROVIDER_CALLS=<number>.",
     "Optional auto-upgrade on weak economy results: SEARCH_AUTO_ESCALATE_STANDARD=true.",
@@ -428,6 +639,15 @@ function respondBuffer(res, statusCode, body, type) {
   res.writeHead(statusCode, withSecurityHeaders({
     "Content-Type": type,
     "Cache-Control": "no-store"
+  }));
+  res.end(body);
+}
+
+function respondBufferWithDisposition(res, statusCode, body, type, fileName) {
+  res.writeHead(statusCode, withSecurityHeaders({
+    "Content-Type": type,
+    "Cache-Control": "no-store",
+    "Content-Disposition": `attachment; filename=\"${sanitizeFileName(fileName)}\"`
   }));
   res.end(body);
 }
@@ -677,6 +897,96 @@ function computeSearchQualitySignals(results) {
     priorityResults: safeResults.filter((row) => Boolean(row?.isPriority)).length,
     distinctDomainsTop8: new Set(topSlice.map((row) => String(row?.domain || ""))).size
   };
+}
+
+function getCachedExtractionResult(cacheKey) {
+  if (EXTRACT_CACHE_TTL_MS <= 0) {
+    return null;
+  }
+
+  const cached = extractResultCache.get(cacheKey);
+  if (!cached) {
+    return null;
+  }
+
+  if (Date.now() - cached.savedAt > EXTRACT_CACHE_TTL_MS) {
+    extractResultCache.delete(cacheKey);
+    return null;
+  }
+
+  extractResultCache.delete(cacheKey);
+  extractResultCache.set(cacheKey, cached);
+  return cached.value;
+}
+
+function setCachedExtractionResult(cacheKey, value) {
+  if (EXTRACT_CACHE_TTL_MS <= 0) {
+    return;
+  }
+
+  extractResultCache.delete(cacheKey);
+  extractResultCache.set(cacheKey, {
+    savedAt: Date.now(),
+    value
+  });
+
+  while (extractResultCache.size > EXTRACT_CACHE_MAX_ENTRIES) {
+    const oldest = extractResultCache.keys().next().value;
+    if (!oldest) {
+      break;
+    }
+    extractResultCache.delete(oldest);
+  }
+}
+
+function saveExtractJob(value) {
+  const now = Date.now();
+  pruneExtractJobStore(now);
+  const jobId = randomUUID();
+  extractJobStore.set(jobId, {
+    savedAt: now,
+    value
+  });
+  return jobId;
+}
+
+function getExtractJob(jobId) {
+  pruneExtractJobStore(Date.now());
+  const entry = extractJobStore.get(jobId);
+  if (!entry) {
+    return null;
+  }
+  return entry.value;
+}
+
+function pruneExtractJobStore(now) {
+  for (const [key, entry] of extractJobStore.entries()) {
+    if (now - entry.savedAt > EXTRACT_JOB_TTL_MS) {
+      extractJobStore.delete(key);
+    }
+  }
+}
+
+function buildExtractDataFileName({ sourceId, outputFormat, runTimestamp }) {
+  const safeSource = sanitizeFileName(sourceId || "extract");
+  const datePart = String(runTimestamp || "").replace(/[:.]/g, "-").replace("T", "_").replace("Z", "");
+  return `${safeSource}_${datePart}.${normalizeOutputFormat(outputFormat)}`;
+}
+
+function buildManifestFileName(dataFileName) {
+  const base = String(dataFileName || "extract.csv").replace(/\.[^.]+$/, "");
+  return `${base}_manifest.json`;
+}
+
+function sanitizeFileName(value) {
+  return String(value || "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 120) || "file";
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function parsePositiveInt(value, fallback) {

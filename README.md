@@ -23,6 +23,7 @@ No extra pages or advanced features are included.
   - timestamp
   - returned results (title, url, snippet, domain, priority flag)
 - Allows replaying saved results from History without re-running search.
+- Adds source-specific **Download data** extraction where supported links are detected.
 
 ## Tech Stack
 
@@ -63,6 +64,12 @@ Exact env vars used:
 - `SEARCH_RATE_LIMIT_BLOCK_MS` (optional temporary block duration in ms, default `300000`)
 - `SEARCH_MAX_BODY_BYTES` (optional max request body size, default `8192`)
 - `SEARCH_MAX_QUERY_CHARS` (optional max query length, default `180`)
+- `EXTRACT_CACHE_TTL_MS` (optional extractor result cache TTL in ms, default `604800000`)
+- `EXTRACT_CACHE_MAX_ENTRIES` (optional extractor cache size cap, default `300`)
+- `EXTRACT_JOB_TTL_MS` (optional extraction artifact retention in ms, default `172800000`)
+- `EXTRACT_LINK_CATALOG_TTL_MS` (optional TDH index catalog cache TTL in ms, default `86400000`)
+- `CENSUS_API_KEY` (optional Census API key)
+- `CDC_SOCRATA_APP_TOKEN` (optional CDC Socrata app token)
 
 If no key is present, the app runs in **Not Configured** mode and does not perform any search.
 
@@ -109,6 +116,9 @@ This repo includes a Render Blueprint file: `render.yaml`.
    - `BRAVE_API_KEY` (preferred), or fallback keys above
    - Optional query assist:
      - `NORMALIZE_QUERY=false` (default; user can toggle in Search tab)
+   - Optional extractor API credentials:
+     - `CENSUS_API_KEY=<optional>`
+     - `CDC_SOCRATA_APP_TOKEN=<optional>`
    - Recommended private access control:
      - `APP_BASIC_AUTH_USER=<team_user>`
      - `APP_BASIC_AUTH_PASS=<strong_password>`
@@ -123,6 +133,27 @@ This repo includes a Render Blueprint file: `render.yaml`.
 
 After deploy, share the Render URL with teammates.  
 If keys are missing, the app still loads but Search shows **Not Configured** setup steps.
+
+## Download Data Extractors (Phase 2)
+
+The app now includes an extractor registry for supported source links. When a result is eligible, the Search tab shows a **Download data** action.
+
+Current extractor modules:
+
+- `cdc_places` (Socrata API)
+- `census_acs` (Census Data API)
+- `cdc_wonder` (template-driven; explicit request body required)
+- `tdh_death_stats` (download-index extraction from TN pages)
+
+Extraction API endpoints:
+
+- `GET /api/extractors/catalog`
+- `GET /api/extractors/eligibility?url=<encoded-url>`
+- `POST /api/extract/run`
+- `GET /api/extract/jobs/{jobId}/data`
+- `GET /api/extract/jobs/{jobId}/manifest`
+
+Every extraction run returns a downloadable data file and a reproducibility manifest containing request details and a SHA-256 hash.
 
 ## Relevance Regression Harness
 
@@ -174,6 +205,12 @@ Normalization unit checks (no provider calls):
 npm run test:normalization
 ```
 
+Extractor registry unit checks (no provider calls):
+
+```bash
+npm run test:extractors
+```
+
 Write a benchmark report JSON:
 
 ```bash
@@ -219,6 +256,7 @@ Operations docs:
 - Quarterly baseline protocol: `docs/BASELINE_UPDATE_PROTOCOL.md`
 - Analyst prompt pack guide: `docs/ANALYST_PROMPT_PACK.md`
 - Phase 2 query normalization plan: `docs/PHASE2_QUERY_NORMALIZATION_PLAN.md`
+- Extractor contract/spec: `EXTRACTORS.md`
 
 ## CI Quality Gate
 

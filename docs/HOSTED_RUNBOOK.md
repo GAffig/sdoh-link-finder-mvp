@@ -42,6 +42,12 @@ Optional:
 - `SEARCH_RATE_LIMIT_BLOCK_MS` (per-IP temporary block duration, default `300000`)
 - `SEARCH_MAX_BODY_BYTES` (max request body bytes, default `8192`)
 - `SEARCH_MAX_QUERY_CHARS` (max query length, default `180`)
+- `EXTRACT_CACHE_TTL_MS` (extractor result cache TTL, default `604800000`)
+- `EXTRACT_CACHE_MAX_ENTRIES` (extractor cache size cap, default `300`)
+- `EXTRACT_JOB_TTL_MS` (extractor artifact retention, default `172800000`)
+- `EXTRACT_LINK_CATALOG_TTL_MS` (TDH link catalog cache TTL, default `86400000`)
+- `CENSUS_API_KEY` (optional Census API key)
+- `CDC_SOCRATA_APP_TOKEN` (optional Socrata app token for CDC PLACES)
 
 ## Deployment Steps
 
@@ -53,6 +59,8 @@ Optional:
      - `APP_BASIC_AUTH_USER=<team_user>`
      - `APP_BASIC_AUTH_PASS=<strong_password>`
      - `NORMALIZE_QUERY=false`
+     - `EXTRACT_CACHE_TTL_MS=604800000`
+     - `EXTRACT_LINK_CATALOG_TTL_MS=86400000`
      - `SEARCH_COST_MODE=economy`
      - `SEARCH_MAX_PROVIDER_CALLS=4`
      - `SEARCH_AUTO_ESCALATE_STANDARD=true`
@@ -74,6 +82,7 @@ Run from deployment shell (or staging environment with same env vars):
 ```bash
 npm run test:syntax
 npm run test:normalization
+npm run test:extractors
 npm run test:relevance -- --max-queries 5 --delay-ms 250
 ```
 

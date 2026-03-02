@@ -57,6 +57,46 @@
         <div id="error-panel" class="panel error hidden"></div>
         <div id="setup-panel" class="panel setup hidden"></div>
         <p id="result-context" class="status hidden"></p>
+        <div id="extract-panel" class="panel extract hidden">
+          <div class="extract-header">
+            <h3>Download Data</h3>
+            <button id="extract-close" type="button" class="secondary">Close</button>
+          </div>
+          <p id="extract-target" class="search-hint"></p>
+          <div class="extract-grid">
+            <label>
+              Source
+              <select id="extract-source"></select>
+            </label>
+            <label>
+              Year
+              <input id="extract-year" type="number" placeholder="2023" min="1900" max="2100" />
+            </label>
+            <label>
+              State/FIPS
+              <input id="extract-state" type="text" placeholder="TN or 47" />
+            </label>
+            <label>
+              Measure ID
+              <input id="extract-measure" type="text" placeholder="optional (e.g., median_household_income)" />
+            </label>
+            <label>
+              Format
+              <select id="extract-format">
+                <option value="csv">CSV</option>
+                <option value="xlsx">XLSX</option>
+              </select>
+            </label>
+          </div>
+          <div class="extract-actions">
+            <button id="extract-run" type="button">Run Extract</button>
+            <p id="extract-status" class="search-hint"></p>
+          </div>
+          <div id="extract-downloads" class="extract-downloads hidden">
+            <a id="extract-data-link" class="open-link" href="#" target="_blank" rel="noopener noreferrer">Download Data File</a>
+            <a id="extract-manifest-link" class="open-link" href="#" target="_blank" rel="noopener noreferrer">Download Manifest</a>
+          </div>
+        </div>
 
         <ul id="results-list" class="results"></ul>
       </section>

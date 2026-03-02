@@ -49,3 +49,15 @@ services:
         value: 8192
       - key: SEARCH_MAX_QUERY_CHARS
         value: 180
+      - key: EXTRACT_CACHE_TTL_MS
+        value: 604800000
+      - key: EXTRACT_CACHE_MAX_ENTRIES
+        value: 300
+      - key: EXTRACT_JOB_TTL_MS
+        value: 172800000
+      - key: EXTRACT_LINK_CATALOG_TTL_MS
+        value: 86400000
+      - key: CENSUS_API_KEY
+        sync: false
+      - key: CDC_SOCRATA_APP_TOKEN
+        sync: false

@@ -19,6 +19,19 @@ const errorPanel = document.getElementById("error-panel");
 const setupPanel = document.getElementById("setup-panel");
 const resultContext = document.getElementById("result-context");
 const resultsList = document.getElementById("results-list");
+const extractPanel = document.getElementById("extract-panel");
+const extractCloseButton = document.getElementById("extract-close");
+const extractTarget = document.getElementById("extract-target");
+const extractSource = document.getElementById("extract-source");
+const extractYear = document.getElementById("extract-year");
+const extractState = document.getElementById("extract-state");
+const extractMeasure = document.getElementById("extract-measure");
+const extractFormat = document.getElementById("extract-format");
+const extractRunButton = document.getElementById("extract-run");
+const extractStatus = document.getElementById("extract-status");
+const extractDownloads = document.getElementById("extract-downloads");
+const extractDataLink = document.getElementById("extract-data-link");
+const extractManifestLink = document.getElementById("extract-manifest-link");
 
 const historyEmpty = document.getElementById("history-empty");
 const historyTable = document.getElementById("history-table");
@@ -27,6 +40,8 @@ const clearHistoryButton = document.getElementById("clear-history");
 
 let appConfig = null;
 let historyItems = loadHistory();
+let lastRenderedResults = [];
+let activeExtractContext = null;
 
 initialize();
 
@@ -65,6 +80,19 @@ function bindEvents() {
     renderHistory();
     clearResultContext();
   });
+
+  if (resultsList) {
+    resultsList.addEventListener("click", onResultsListClick);
+  }
+  if (extractCloseButton) {
+    extractCloseButton.addEventListener("click", () => hideExtractPanel());
+  }
+  if (extractRunButton) {
+    extractRunButton.addEventListener("click", () => runExtractJob());
+  }
+  if (extractSource) {
+    extractSource.addEventListener("change", () => applyExtractSourceDefaults());
+  }
 }
 
 function switchTab(tabName) {
@@ -156,6 +184,7 @@ function renderSearchConfigNote(config) {
 async function runSearch() {
   hideError();
   clearResultContext();
+  hideExtractPanel();
 
   const query = queryInput.value.trim();
   if (!query) {
@@ -253,8 +282,9 @@ async function runSearch() {
 
 function renderResults(results) {
   resultsList.innerHTML = "";
+  lastRenderedResults = Array.isArray(results) ? results : [];
 
-  if (!Array.isArray(results) || results.length === 0) {
+  if (lastRenderedResults.length === 0) {
     const item = document.createElement("li");
     item.className = "panel";
     item.textContent = "No results returned.";
@@ -262,13 +292,20 @@ function renderResults(results) {
     return;
   }
 
-  for (const [index, result] of results.entries()) {
+  for (const [index, result] of lastRenderedResults.entries()) {
     const li = document.createElement("li");
     li.className = "result";
 
     const priorityBadge = result.isPriority ? '<span class="meta-pill priority">Priority Source</span>' : "";
+    const extractorCount = Array.isArray(result.extractors) ? result.extractors.length : 0;
+    const downloadBadge = extractorCount > 0
+      ? `<span class="download-badge">Download ready</span>`
+      : "";
     const displayDomain = escapeHtml(result.domain || result.url);
     const openUrl = escapeAttribute(result.url);
+    const downloadAction = extractorCount > 0
+      ? `<button type="button" class="secondary download-action" data-action="download" data-index="${index}">Download data</button>`
+      : "";
 
     li.innerHTML = `
       <div class="result-head">
@@ -284,11 +321,215 @@ function renderResults(results) {
         </div>
       </div>
       <p class="snippet">${escapeHtml(result.snippet || "")}</p>
-      <a class="open-link" href="${openUrl}" target="_blank" rel="noopener noreferrer">Open source</a>
+      <div>
+        <a class="open-link" href="${openUrl}" target="_blank" rel="noopener noreferrer">Open source</a>
+        ${downloadBadge}
+      </div>
+      ${downloadAction}
     `;
 
     resultsList.appendChild(li);
   }
+}
+
+function onResultsListClick(event) {
+  const button = event.target.closest("button[data-action='download']");
+  if (!button) {
+    return;
+  }
+
+  const index = Number(button.dataset.index);
+  if (!Number.isFinite(index) || index < 0 || index >= lastRenderedResults.length) {
+    return;
+  }
+
+  const result = lastRenderedResults[index];
+  openExtractPanel(result);
+}
+
+function openExtractPanel(result) {
+  const extractors = Array.isArray(result?.extractors) ? result.extractors : [];
+  if (extractors.length === 0) {
+    showError("No extractor is configured for this result.");
+    return;
+  }
+
+  activeExtractContext = {
+    url: result.url,
+    title: result.title,
+    extractorMap: Object.fromEntries(extractors.map((item) => [item.sourceId, item]))
+  };
+
+  if (extractTarget) {
+    extractTarget.textContent = `Target: ${result.title}`;
+  }
+
+  if (extractSource) {
+    extractSource.innerHTML = "";
+    for (const extractor of extractors) {
+      const option = document.createElement("option");
+      option.value = extractor.sourceId;
+      option.textContent = extractor.label;
+      extractSource.appendChild(option);
+    }
+  }
+
+  if (extractFormat) {
+    extractFormat.value = "csv";
+  }
+  clearExtractResultLinks();
+  setExtractStatus("");
+  applyExtractSourceDefaults();
+  extractPanel?.classList.remove("hidden");
+}
+
+function hideExtractPanel() {
+  activeExtractContext = null;
+  clearExtractResultLinks();
+  setExtractStatus("");
+  if (extractPanel) {
+    extractPanel.classList.add("hidden");
+  }
+}
+
+function applyExtractSourceDefaults() {
+  if (!activeExtractContext || !extractSource) {
+    return;
+  }
+
+  const selectedSourceId = extractSource.value;
+  const selected = activeExtractContext.extractorMap?.[selectedSourceId];
+  const defaults = selected?.defaults || {};
+
+  if (extractYear) {
+    const year = defaults.vintage || defaults.year || "";
+    extractYear.value = year ? String(year) : "";
+  }
+  if (extractState) {
+    const state = defaults.state || defaults.stateAbbr || "";
+    extractState.value = state ? String(state) : "";
+  }
+  if (extractMeasure) {
+    const measureId = defaults.measureId || "";
+    extractMeasure.value = measureId ? String(measureId) : "";
+  }
+  if (extractFormat) {
+    const formats = Array.isArray(selected?.supportedOutputFormats)
+      ? selected.supportedOutputFormats
+      : ["csv"];
+    const canUseXlsx = formats.includes("xlsx");
+    const xlsxOption = extractFormat.querySelector("option[value='xlsx']");
+    if (xlsxOption) {
+      xlsxOption.disabled = !canUseXlsx;
+    }
+    extractFormat.value = formats.includes("csv") ? "csv" : formats[0];
+  }
+}
+
+async function runExtractJob() {
+  hideError();
+  if (!extractRunButton) {
+    return;
+  }
+  if (!activeExtractContext) {
+    showError("Choose a result with Download data first.");
+    return;
+  }
+  if (!extractSource?.value) {
+    showError("Choose an extractor source.");
+    return;
+  }
+
+  const selectedSourceId = extractSource.value;
+  const selected = activeExtractContext.extractorMap?.[selectedSourceId] || {};
+  const outputFormat = String(extractFormat?.value || "csv");
+  const parameters = {
+    ...(selected.defaults || {})
+  };
+
+  const yearValue = String(extractYear?.value || "").trim();
+  const stateValue = String(extractState?.value || "").trim();
+  const measureValue = String(extractMeasure?.value || "").trim();
+
+  if (yearValue) {
+    parameters.year = yearValue;
+    parameters.vintage = yearValue;
+  }
+  if (stateValue) {
+    parameters.state = stateValue;
+    parameters.stateAbbr = stateValue;
+  }
+  if (measureValue) {
+    parameters.measureId = measureValue;
+    parameters.measure = measureValue;
+  }
+  if (selectedSourceId === "tdh_death_stats") {
+    parameters.indexUrl = activeExtractContext.url;
+  }
+
+  extractRunButton.disabled = true;
+  clearExtractResultLinks();
+  setExtractStatus("Running extraction...");
+
+  try {
+    const response = await fetch("/api/extract/run", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        sourceId: selectedSourceId,
+        sourceUrl: activeExtractContext.url,
+        query: queryInput.value.trim(),
+        outputFormat,
+        parameters
+      })
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      let message = payload?.error || "Extraction failed.";
+      if (payload?.details?.templateId) {
+        message += ` (template: ${payload.details.templateId})`;
+      }
+      setExtractStatus(message);
+      return;
+    }
+
+    if (extractDataLink) {
+      extractDataLink.href = payload.dataDownloadUrl;
+    }
+    if (extractManifestLink) {
+      extractManifestLink.href = payload.manifestDownloadUrl;
+    }
+    if (extractDownloads) {
+      extractDownloads.classList.remove("hidden");
+    }
+    const cacheText = payload.cached ? "cache hit" : "fresh run";
+    setExtractStatus(`Extract ready: ${payload.rowCount} rows (${cacheText}).`);
+  } catch (error) {
+    setExtractStatus(`Extraction request failed: ${String(error)}`);
+  } finally {
+    extractRunButton.disabled = false;
+  }
+}
+
+function clearExtractResultLinks() {
+  if (extractDownloads) {
+    extractDownloads.classList.add("hidden");
+  }
+  if (extractDataLink) {
+    extractDataLink.href = "#";
+  }
+  if (extractManifestLink) {
+    extractManifestLink.href = "#";
+  }
+}
+
+function setExtractStatus(message) {
+  if (!extractStatus) {
+    return;
+  }
+  extractStatus.textContent = message;
 }
 
 function renderHistory() {
@@ -336,6 +577,7 @@ function openHistoryItem(itemId) {
     saveNormalizeQueryPreference(Boolean(normalizeQueryToggle.checked));
     renderNormalizeQueryNote(Boolean(normalizeQueryToggle.checked), appConfig?.normalization?.defaultEnabled);
   }
+  hideExtractPanel();
   renderResults(selected.results || []);
   if (IS_DEBUG_MODE) {
     const normalizationLabel = buildNormalizationLabel({

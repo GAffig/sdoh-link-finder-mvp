@@ -78,6 +78,8 @@ Possible additions:
 
 AI must NOT change ranking authority rules.
 
+Extractor/download capability rules for Phase 2 live in `EXTRACTORS.md`.
+
 ### Phase 3 — Intelligence Layer (Long-Term)
 
 AI becomes valuable here.

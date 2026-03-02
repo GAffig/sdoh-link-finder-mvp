@@ -33,6 +33,9 @@ jobs:
       - name: Run normalization tests
         run: npm run test:normalization
 
+      - name: Run extractor registry tests
+        run: npm run test:extractors
+
   relevance:
     name: Live Relevance Harness
     needs: syntax
