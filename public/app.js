@@ -1,5 +1,6 @@
 const HISTORY_KEY = "sodh-link-finder-history-v1";
 const NORMALIZE_QUERY_PREF_KEY = "sodh-link-finder-normalize-query-v1";
+const IS_DEBUG_MODE = new URLSearchParams(window.location.search).get("debug") === "1";
 
 const tabButtons = document.querySelectorAll(".tab");
 const views = {
@@ -9,6 +10,7 @@ const views = {
 
 const queryInput = document.getElementById("query-input");
 const searchButton = document.getElementById("search-button");
+const advancedOptions = document.getElementById("advanced-options");
 const normalizeQueryToggle = document.getElementById("normalize-query-toggle");
 const normalizeQueryNote = document.getElementById("normalize-query-note");
 const searchConfigNote = document.getElementById("search-config-note");
@@ -31,6 +33,9 @@ initialize();
 async function initialize() {
   bindEvents();
   renderHistory();
+  if (advancedOptions && IS_DEBUG_MODE) {
+    advancedOptions.open = true;
+  }
   await loadConfig();
 }
 
@@ -84,6 +89,7 @@ async function loadConfig() {
   } catch (error) {
     appConfig = { configured: false };
     showError(`Failed to load app configuration: ${String(error)}`);
+    renderSearchConfigNote(appConfig);
     applyNormalizeQueryConfig({ configured: false, normalization: { defaultEnabled: false } });
   }
 }
@@ -117,6 +123,13 @@ function renderSearchConfigNote(config) {
   if (!searchConfigNote) {
     return;
   }
+
+  if (!IS_DEBUG_MODE) {
+    searchConfigNote.classList.add("hidden");
+    return;
+  }
+
+  searchConfigNote.classList.remove("hidden");
 
   const cost = config?.searchCost || {};
   const escalation = config?.autoEscalation || {};
@@ -199,13 +212,24 @@ async function runSearch() {
       normalizedQuery: payload.normalizedQuery,
       queryNormalization
     });
-    const contextParts = [
-      `Showing ${payload.results.length} ranked links from ${providerName}.`,
-      modeLabel,
-      normalizationLabel,
-      `${callLabel}.`
-    ].filter(Boolean);
-    showResultContext(contextParts.join(" "));
+    if (IS_DEBUG_MODE) {
+      const contextParts = [
+        `Showing ${payload.results.length} ranked links from ${providerName}.`,
+        modeLabel,
+        normalizationLabel,
+        `${callLabel}.`
+      ].filter(Boolean);
+      showResultContext(contextParts.join(" "));
+    } else {
+      const contextParts = [`Showing ${payload.results.length} ranked links from ${providerName}.`];
+      if (queryNormalization?.enabled && queryNormalization?.changed) {
+        contextParts.push("Query normalized for better recall.");
+      }
+      if (metadata.cacheHit) {
+        contextParts.push("Served from cache.");
+      }
+      showResultContext(contextParts.join(" "));
+    }
 
     const historyRecord = {
       id: makeId(),
@@ -313,14 +337,18 @@ function openHistoryItem(itemId) {
     renderNormalizeQueryNote(Boolean(normalizeQueryToggle.checked), appConfig?.normalization?.defaultEnabled);
   }
   renderResults(selected.results || []);
-  const normalizationLabel = buildNormalizationLabel({
-    query: selected.query,
-    normalizedQuery: selected.normalizedQuery || selected.query,
-    queryNormalization: selected.queryNormalization || {}
-  });
-  showResultContext(
-    `Loaded saved results from ${formatDate(selected.timestamp)} (no new search run). ${normalizationLabel}`
-  );
+  if (IS_DEBUG_MODE) {
+    const normalizationLabel = buildNormalizationLabel({
+      query: selected.query,
+      normalizedQuery: selected.normalizedQuery || selected.query,
+      queryNormalization: selected.queryNormalization || {}
+    });
+    showResultContext(
+      `Loaded saved results from ${formatDate(selected.timestamp)} (no new search run). ${normalizationLabel}`
+    );
+  } else {
+    showResultContext(`Loaded saved results from ${formatDate(selected.timestamp)} (no new search run).`);
+  }
   switchTab("search");
 }
 
@@ -409,24 +437,30 @@ function renderNormalizeQueryNote(enabled, defaultEnabled) {
     return;
   }
 
-  const toggleState = enabled ? "ON" : "OFF";
-  const defaultState = defaultEnabled ? "ON" : "OFF";
-  normalizeQueryNote.textContent =
-    `Normalization ${toggleState}: typo cleanup + SoDH abbreviation expansion (default: ${defaultState}).`;
+  const defaultState = defaultEnabled ? "on" : "off";
+  if (enabled) {
+    normalizeQueryNote.textContent =
+      `On: typo cleanup, state expansion, and indicator alias matching (default: ${defaultState}).`;
+    return;
+  }
+
+  normalizeQueryNote.textContent = `Off. Default is ${defaultState}.`;
 }
 
 function buildNormalizationLabel({ query, normalizedQuery, queryNormalization }) {
   if (!queryNormalization?.enabled) {
-    return "normalization: off.";
+    return IS_DEBUG_MODE ? "normalization: off." : "";
   }
 
   const changed = Boolean(queryNormalization.changed);
   const ruleCount = Number(queryNormalization.appliedRuleCount || 0);
   if (!changed || !normalizedQuery || normalizedQuery === query) {
-    return "normalization: on.";
+    return IS_DEBUG_MODE ? "normalization: on." : "Query normalization enabled.";
   }
 
-  return `normalization: on (${ruleCount} rules). search query used: "${normalizedQuery}".`;
+  return IS_DEBUG_MODE
+    ? `normalization: on (${ruleCount} rules). search query used: "${normalizedQuery}".`
+    : "Query normalized for better recall.";
 }
 
 function loadNormalizeQueryPreference() {

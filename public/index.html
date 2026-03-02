@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Population Health Evidence Portal</title>
+    <title>Population Health Data Search</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -16,17 +16,9 @@
         <div class="hero-main">
           <div class="brand-mark" aria-hidden="true">PH</div>
           <div>
-            <p class="eyebrow">Enterprise Secondary Data Access</p>
-            <h1>Population Health Evidence Portal</h1>
-            <p class="subtitle">
-              Trusted dataset, table, and map retrieval for CHNA and SoDH analysis teams.
-            </p>
+            <h1>Population Health Data Search</h1>
+            <p class="subtitle">Find trusted tables, datasets, and maps for CHNA and SDoH research.</p>
           </div>
-        </div>
-        <div class="hero-pills">
-          <span class="hero-pill">Deterministic Ranking</span>
-          <span class="hero-pill">Priority Source First</span>
-          <span class="hero-pill">Citable Links</span>
         </div>
       </header>
 
@@ -42,20 +34,23 @@
             <input
               id="query-input"
               type="text"
-              placeholder="e.g., Uninsured rate, median household income, life expectancy by county"
+              placeholder="e.g., uninsured rate by county Tennessee"
               autocomplete="off"
             />
-            <button id="search-button" type="button">Find Sources</button>
+            <button id="search-button" type="button">Search</button>
           </div>
-          <div class="search-options">
-            <label class="toggle-option" for="normalize-query-toggle">
-              <input id="normalize-query-toggle" type="checkbox" />
-              <span>Use deterministic query normalization</span>
-            </label>
-            <p id="normalize-query-note" class="search-hint"></p>
-          </div>
-          <p class="search-hint">Focus: downloadable datasets, structured tables, and maps from trusted domains.</p>
-          <p id="search-config-note" class="search-hint"></p>
+          <p class="search-hint">Trusted sources only. Open any result in a new tab.</p>
+          <details id="advanced-options" class="advanced-options">
+            <summary>Advanced options</summary>
+            <div class="search-options">
+              <label class="toggle-option" for="normalize-query-toggle">
+                <input id="normalize-query-toggle" type="checkbox" />
+                <span>Enable query normalization</span>
+              </label>
+              <p id="normalize-query-note" class="search-hint"></p>
+              <p id="search-config-note" class="search-hint"></p>
+            </div>
+          </details>
         </div>
 
         <p id="loading-indicator" class="status hidden">Searching...</p>

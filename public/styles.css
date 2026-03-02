@@ -95,7 +95,7 @@ body {
 .hero {
   position: relative;
   border-radius: 18px;
-  padding: 20px;
+  padding: 18px;
   color: #f3f7fb;
   background:
     radial-gradient(circle at 14% 10%, rgba(20, 184, 166, 0.25), transparent 44%),
@@ -111,7 +111,7 @@ body {
   pointer-events: none;
   background-image: linear-gradient(transparent 96%, rgba(255, 255, 255, 0.08) 97%);
   background-size: 100% 28px;
-  opacity: 0.35;
+  opacity: 0.2;
 }
 
 .hero-main {
@@ -137,17 +137,8 @@ body {
   box-shadow: 0 10px 24px rgba(7, 35, 56, 0.35);
 }
 
-.eyebrow {
-  margin: 0;
-  font-size: 0.73rem;
-  font-weight: 700;
-  letter-spacing: 0.095em;
-  text-transform: uppercase;
-  opacity: 0.9;
-}
-
 h1 {
-  margin: 7px 0 0;
+  margin: 0;
   font-family: "Space Grotesk", "Public Sans", sans-serif;
   font-size: clamp(1.25rem, 2.4vw, 1.88rem);
   line-height: 1.2;
@@ -156,31 +147,11 @@ h1 {
 }
 
 .subtitle {
-  margin: 9px 0 0;
-  max-width: 820px;
+  margin: 7px 0 0;
+  max-width: 620px;
+  font-size: 0.98rem;
   color: rgba(236, 247, 255, 0.9);
   line-height: 1.45;
-}
-
-.hero-pills {
-  position: relative;
-  z-index: 1;
-  margin-top: 14px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.hero-pill {
-  display: inline-block;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: #e1f5ff;
-  background: rgba(255, 255, 255, 0.14);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  padding: 5px 10px;
-  border-radius: 999px;
 }
 
 .tabs {
@@ -231,7 +202,7 @@ h1 {
   border: 1px solid var(--line);
   border-radius: 14px;
   background: linear-gradient(145deg, #ffffff 0%, #f8fbff 100%);
-  padding: 14px;
+  padding: 16px;
   box-shadow: var(--shadow-md);
 }
 
@@ -307,16 +278,45 @@ button.secondary {
 }
 
 .search-hint {
-  margin: 8px 0 0;
+  margin: 9px 0 0;
   font-size: 0.84rem;
   color: var(--muted);
 }
 
 .search-options {
-  margin-top: 10px;
+  margin-top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+}
+
+.advanced-options {
+  margin-top: 10px;
+  border-top: 1px solid #d8e4ee;
+  padding-top: 10px;
+}
+
+.advanced-options > summary {
+  cursor: pointer;
+  font-size: 0.83rem;
+  font-weight: 700;
+  color: #2e556f;
+  list-style: none;
+}
+
+.advanced-options > summary::-webkit-details-marker {
+  display: none;
+}
+
+.advanced-options > summary::after {
+  content: "+";
+  float: right;
+  font-weight: 800;
+  color: #2d5f7e;
+}
+
+.advanced-options[open] > summary::after {
+  content: "\2212";
 }
 
 .toggle-option {
@@ -340,8 +340,13 @@ button.secondary {
 }
 
 #search-config-note {
-  margin-top: 4px;
+  margin-top: 2px;
+  border: 1px dashed #cad9e5;
+  border-radius: 10px;
+  padding: 8px;
+  font-size: 0.78rem;
   color: #35566c;
+  background: #edf4fa;
 }
 
 .status {
@@ -638,7 +643,7 @@ button.secondary {
   }
 
   .hero {
-    padding: 15px;
+    padding: 14px;
   }
 
   .hero-main {
@@ -655,6 +660,10 @@ button.secondary {
 
   .search-controls {
     grid-template-columns: 1fr;
+  }
+
+  .subtitle {
+    font-size: 0.95rem;
   }
 
   button,
