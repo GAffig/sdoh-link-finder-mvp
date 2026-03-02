@@ -11,7 +11,7 @@ import {
 const DEFAULT_TDH_INDEX_URL =
   "https://www.tn.gov/health/health-program-areas/statistics/health-data/death-statistics.html";
 
-let cachedXlsxModule = null;
+let cachedExcelJsModule = null;
 
 export const tnDeathStatsExtractor = Object.freeze({
   id: "tdh_death_stats",
@@ -184,10 +184,10 @@ function buildCatalogOutput({ source, sourceUrl, method, includePdf, includeExce
 }
 
 async function extractTidyRows({ sourceId, links, maxFiles, fetchImpl }) {
-  const selected = links.filter((item) => ["xlsx", "xls", "csv"].includes(item.fileType)).slice(0, maxFiles);
+  const selected = links.filter((item) => ["xlsx", "csv"].includes(item.fileType)).slice(0, maxFiles);
   if (selected.length === 0) {
     throw createExtractorError(
-      "No CSV/XLS/XLSX files found in selected TDH links for tidy extraction.",
+      "No CSV/XLSX files found in selected TDH links for tidy extraction.",
       422
     );
   }
@@ -197,7 +197,7 @@ async function extractTidyRows({ sourceId, links, maxFiles, fetchImpl }) {
     let records = [];
     if (item.fileType === "csv") {
       records = await fetchCsvRecords(item.downloadUrl, fetchImpl);
-    } else if (item.fileType === "xlsx" || item.fileType === "xls") {
+    } else if (item.fileType === "xlsx") {
       records = await fetchWorkbookRecords(item.downloadUrl, fetchImpl);
     }
 
@@ -236,20 +236,38 @@ async function fetchWorkbookRecords(downloadUrl, fetchImpl) {
   }
 
   const arrayBuffer = await response.arrayBuffer();
-  const XLSX = await loadXlsxLibrary();
-  const workbook = XLSX.read(Buffer.from(arrayBuffer), { type: "buffer" });
+  const ExcelJs = await loadExcelJsLibrary();
+  const workbook = new ExcelJs.Workbook();
+  await workbook.xlsx.load(Buffer.from(arrayBuffer));
 
   const records = [];
-  for (const sheetName of workbook.SheetNames) {
-    const sheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(sheet, {
-      defval: "",
-      raw: false,
-      blankrows: false
+  for (const worksheet of workbook.worksheets) {
+    const matrixRows = [];
+    worksheet.eachRow({ includeEmpty: false }, (row) => {
+      const values = Array.isArray(row.values) ? row.values.slice(1) : [];
+      const normalizedValues = values.map((cell) => normalizeExcelCell(cell));
+      if (normalizedValues.some((value) => String(value).trim() !== "")) {
+        matrixRows.push(normalizedValues);
+      }
     });
-    for (const row of rows) {
+
+    if (matrixRows.length === 0) {
+      continue;
+    }
+
+    const headerRow = matrixRows[0].map((value, index) => {
+      const header = String(value || "").trim();
+      return header || `column_${index + 1}`;
+    });
+
+    for (let rowIndex = 1; rowIndex < matrixRows.length; rowIndex += 1) {
+      const sourceRow = matrixRows[rowIndex];
+      const row = {};
+      for (let columnIndex = 0; columnIndex < headerRow.length; columnIndex += 1) {
+        row[headerRow[columnIndex]] = sourceRow[columnIndex] ?? "";
+      }
       records.push({
-        __sheet: sheetName,
+        __sheet: worksheet.name,
         ...row
       });
       if (records.length >= 10000) {
@@ -261,21 +279,40 @@ async function fetchWorkbookRecords(downloadUrl, fetchImpl) {
   return records;
 }
 
-async function loadXlsxLibrary() {
-  if (cachedXlsxModule) {
-    return cachedXlsxModule;
+async function loadExcelJsLibrary() {
+  if (cachedExcelJsModule) {
+    return cachedExcelJsModule;
   }
 
   try {
-    const imported = await import("xlsx");
-    cachedXlsxModule = imported.default || imported;
-    return cachedXlsxModule;
+    const imported = await import("exceljs");
+    cachedExcelJsModule = imported.default || imported;
+    return cachedExcelJsModule;
   } catch {
     throw createExtractorError(
-      "Workbook conversion requires the 'xlsx' package. Add dependency 'xlsx' and redeploy to enable TDH tidy conversion for XLSX files.",
+      "Workbook conversion requires the 'exceljs' package. Add dependency 'exceljs' and redeploy to enable TDH tidy conversion for XLSX files.",
       501
     );
   }
+}
+
+function normalizeExcelCell(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (typeof value === "object") {
+    if (value.text) {
+      return String(value.text);
+    }
+    if (value.richText && Array.isArray(value.richText)) {
+      return value.richText.map((item) => String(item?.text || "")).join("");
+    }
+    if (value.result !== undefined && value.result !== null) {
+      return String(value.result);
+    }
+    return String(value.value || "");
+  }
+  return String(value);
 }
 
 function normalizeTidyRecord({ sourceId, linkItem, record }) {

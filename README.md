@@ -158,7 +158,7 @@ Every extraction run returns a downloadable data file and a reproducibility mani
 TDH extractor modes:
 
 - `catalog` -> returns a structured catalog of downloadable TDH files.
-- `tidy` -> downloads matching CSV/XLS/XLSX files and converts rows into standardized output columns.
+- `tidy` -> downloads matching CSV/XLSX files and converts rows into standardized output columns.
 
 ## Relevance Regression Harness
 
