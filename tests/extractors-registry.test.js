@@ -36,6 +36,11 @@ function testEligibilityByDomain() {
 
   const wonder = getEligibleExtractors({ url: "https://wonder.cdc.gov/" });
   assert.ok(wonder.some((item) => item.sourceId === "cdc_wonder"));
+  const wonderEntry = wonder.find((item) => item.sourceId === "cdc_wonder");
+  assert.ok(Array.isArray(wonderEntry?.templateOptions));
+  assert.ok(wonderEntry.templateOptions.length >= 2);
+  assert.ok(wonderEntry.templateOptions.some((item) => item.id === "mortality_county_v1"));
+  assert.ok(wonderEntry.templateOptions.some((item) => item.id === "natality_county_v1"));
 
   const genericCdc = getEligibleExtractors({ url: "https://www.cdc.gov/nchs/data/vsrr/vsrr-038.pdf" });
   assert.ok(!genericCdc.some((item) => item.sourceId === "cdc_wonder"));

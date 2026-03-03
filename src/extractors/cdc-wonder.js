@@ -1,45 +1,75 @@
-import { hostMatches, normalizeText, parseCsvRecords, resolveHost } from "./helpers.js";
+import { hostMatches, normalizeText, parseCsvRecords, parseYear, resolveHost } from "./helpers.js";
 
 const WONDER_TERMS_URL = "https://wonder.cdc.gov/";
+const CURRENT_YEAR = new Date().getUTCFullYear();
+const DEFAULT_YEAR = CURRENT_YEAR - 1;
 
 const WONDER_TEMPLATES = Object.freeze({
   mortality_county_v1: Object.freeze({
     id: "mortality_county_v1",
-    label: "Mortality by County",
+    label: "Mortality",
     module: "Underlying Cause of Death",
-    requestEndpoint: "https://wonder.cdc.gov/controller/datarequest",
-    requestMethod: "POST",
-    requestEncoding: "form",
-    // User can override these keys in parameters.requestBody.
-    defaultRequestBody: Object.freeze({
-      stage: "request",
-      M_1: "D76.V1-level1",
-      "F_D76.V9": "*All*",
-      "F_D76.V27": "*All*",
-      "I_D76.V1": "*All*"
-    }),
-    supportedGeographyTypes: Object.freeze(["county", "state"]),
-    supportedOutputFormats: Object.freeze(["csv"])
+    databaseId: "D76",
+    description: "Preconfigured mortality template with a single-year selector.",
+    defaultYear: DEFAULT_YEAR,
+    yearFilterParameter: "F_D76.V1",
+    measurePriorityKeys: Object.freeze(["Deaths", "Crude Rate", "Age-adjusted Rate"]),
+    baseParameters: Object.freeze([
+      Object.freeze({ name: "B_1", values: Object.freeze(["D76.V1-level1"]) }),
+      Object.freeze({ name: "M_1", values: Object.freeze(["D76.M1"]) }),
+      Object.freeze({ name: "M_2", values: Object.freeze(["D76.M3"]) }),
+      Object.freeze({ name: "F_D76.V2", values: Object.freeze(["*All*"]) }),
+      Object.freeze({ name: "F_D76.V9", values: Object.freeze(["*All*"]) }),
+      Object.freeze({ name: "F_D76.V27", values: Object.freeze(["*All*"]) }),
+      Object.freeze({ name: "I_D76.V1", values: Object.freeze(["*All*"]) }),
+      Object.freeze({ name: "O_javascript", values: Object.freeze(["off"]) })
+    ])
+  }),
+  natality_county_v1: Object.freeze({
+    id: "natality_county_v1",
+    label: "Natality",
+    module: "Natality",
+    databaseId: "D66",
+    description: "Preconfigured natality template with a single-year selector.",
+    defaultYear: DEFAULT_YEAR,
+    yearFilterParameter: "F_D66.V1",
+    measurePriorityKeys: Object.freeze(["Births", "Birth Rate"]),
+    baseParameters: Object.freeze([
+      Object.freeze({ name: "B_1", values: Object.freeze(["D66.V1-level1"]) }),
+      Object.freeze({ name: "M_1", values: Object.freeze(["D66.M1"]) }),
+      Object.freeze({ name: "M_2", values: Object.freeze(["D66.M2"]) }),
+      Object.freeze({ name: "F_D66.V8", values: Object.freeze(["*All*"]) }),
+      Object.freeze({ name: "I_D66.V1", values: Object.freeze(["*All*"]) }),
+      Object.freeze({ name: "O_javascript", values: Object.freeze(["off"]) })
+    ])
   })
 });
 
+const WONDER_TEMPLATE_OPTIONS = Object.freeze(
+  Object.values(WONDER_TEMPLATES).map((template) =>
+    Object.freeze({
+      id: template.id,
+      label: template.label,
+      module: template.module,
+      description: template.description
+    })
+  )
+);
+
 export const cdcWonderExtractor = Object.freeze({
   id: "cdc_wonder",
-  label: "CDC WONDER (Template)",
+  label: "CDC WONDER (Preset Templates)",
   method: "api_template",
-  description: "Template-driven CDC WONDER extraction with reproducible query definitions.",
+  description: "Preset CDC WONDER templates with deterministic request bodies and limited controls.",
   supportedDomains: Object.freeze(["wonder.cdc.gov"]),
   supportedOutputFormats: Object.freeze(["csv"]),
   defaultParameters: Object.freeze({
-    templateId: "mortality_county_v1"
+    templateId: "mortality_county_v1",
+    year: DEFAULT_YEAR
   }),
   eligibility(result) {
     const host = resolveHost(result?.url);
-    if (!host) {
-      return null;
-    }
-
-    if (!hostMatches(host, "wonder.cdc.gov")) {
+    if (!host || !hostMatches(host, "wonder.cdc.gov")) {
       return null;
     }
 
@@ -48,7 +78,9 @@ export const cdcWonderExtractor = Object.freeze({
       label: this.label,
       method: this.method,
       supportedOutputFormats: [...this.supportedOutputFormats],
-      defaults: this.defaultParameters
+      defaults: this.defaultParameters,
+      templateOptions: WONDER_TEMPLATE_OPTIONS,
+      notes: "Use preset templates only. State/county filters are not exposed in this MVP."
     };
   },
   async extract({ url, parameters, fetchImpl }) {
@@ -60,7 +92,7 @@ export const cdcWonderExtractor = Object.freeze({
       );
     }
 
-    const templateId = String(parameters?.templateId || "mortality_county_v1").trim();
+    const templateId = String(parameters?.templateId || this.defaultParameters.templateId).trim();
     const template = WONDER_TEMPLATES[templateId];
     if (!template) {
       throw createExtractorError(
@@ -69,26 +101,20 @@ export const cdcWonderExtractor = Object.freeze({
       );
     }
 
-    const requestBody = buildRequestBody(template, parameters);
-    if (Object.keys(requestBody).length === 0) {
-      throw createExtractorError(
-        `Template "${templateId}" has no request body. Provide parameters.requestBody for the WONDER module request.`,
-        400
-      );
-    }
-
+    const selectedYear = resolveSelectedYear(parameters?.year, template.defaultYear);
+    const requestXml = buildRequestXml({
+      template,
+      selectedYear
+    });
+    const endpoint = `https://wonder.cdc.gov/controller/datarequest/${template.databaseId}`;
     const requestPayload = new URLSearchParams();
-    for (const [key, value] of Object.entries(requestBody)) {
-      if (value === undefined || value === null || value === "") {
-        continue;
-      }
-      requestPayload.set(key, String(value));
-    }
+    requestPayload.set("request_xml", requestXml);
+    requestPayload.set("accept_datause_restrictions", "true");
 
-    const response = await fetchImpl(template.requestEndpoint, {
-      method: template.requestMethod,
+    const response = await fetchImpl(endpoint, {
+      method: "POST",
       headers: {
-        Accept: "text/csv, text/plain, text/html",
+        Accept: "application/xml,text/xml,text/plain,text/csv",
         "Content-Type": "application/x-www-form-urlencoded; charset=utf-8"
       },
       body: requestPayload.toString()
@@ -96,38 +122,44 @@ export const cdcWonderExtractor = Object.freeze({
 
     const rawText = await response.text();
     if (!response.ok) {
+      const providerMessage = extractProviderMessage(rawText);
       throw createExtractorError(
-        `CDC WONDER template request returned HTTP ${response.status}.`,
+        `CDC WONDER template request returned HTTP ${response.status}. ${providerMessage || "Template request was rejected."}`,
         502,
         {
           templateId,
           module: template.module,
-          endpoint: template.requestEndpoint,
-          responseSnippet: rawText.slice(0, 400)
+          databaseId: template.databaseId,
+          endpoint,
+          responseSnippet: rawText.slice(0, 500)
         }
       );
     }
 
-    const csvRecords = parseCsvRecords(rawText);
-    if (csvRecords.length === 0) {
+    const tableRecords = parseWonderRecords(rawText);
+    if (tableRecords.length === 0) {
+      const providerMessage = extractProviderMessage(rawText);
       throw createExtractorError(
-        "CDC WONDER response did not return CSV rows. Verify template/request body for this module.",
+        "CDC WONDER response returned no tabular rows for the selected template/year.",
         422,
         {
           templateId,
           module: template.module,
-          endpoint: template.requestEndpoint,
-          responseSnippet: rawText.slice(0, 400)
+          databaseId: template.databaseId,
+          endpoint,
+          providerMessage,
+          responseSnippet: rawText.slice(0, 500)
         }
       );
     }
 
-    const standardizedRows = csvRecords.map((row) => normalizeWonderRow({
-      row,
-      templateId,
-      templateLabel: template.label,
-      parameters
-    }));
+    const standardizedRows = tableRecords.map((row) =>
+      normalizeWonderRow({
+        row,
+        template,
+        selectedYear
+      })
+    );
 
     return {
       source: this.id,
@@ -135,17 +167,15 @@ export const cdcWonderExtractor = Object.freeze({
       method: this.method,
       parameters: {
         templateId,
-        yearStart: normalizeYear(parameters?.yearStart || parameters?.year || null),
-        yearEnd: normalizeYear(parameters?.yearEnd || parameters?.year || null),
-        state: String(parameters?.state || "").trim() || null,
-        geographyType: String(parameters?.geographyType || "county").trim(),
-        requestBody
+        year: selectedYear
       },
       requestDetails: {
-        endpoint: template.requestEndpoint,
+        endpoint,
         queryString: "",
         templateId,
-        templateModule: template.module
+        templateModule: template.module,
+        databaseId: template.databaseId,
+        requestXml
       },
       licenseOrTermsUrl: WONDER_TERMS_URL,
       rows: standardizedRows
@@ -153,116 +183,245 @@ export const cdcWonderExtractor = Object.freeze({
   }
 });
 
-function buildRequestBody(template, parameters) {
-  const base = {
-    ...template.defaultRequestBody
-  };
-
-  const providedBody = parseRequestBody(parameters?.requestBody, parameters?.requestBodyJson);
-  const merged = {
-    ...base,
-    ...providedBody
-  };
-
-  const yearStart = normalizeYear(parameters?.yearStart || parameters?.year || "");
-  const yearEnd = normalizeYear(parameters?.yearEnd || parameters?.year || "");
-  const state = String(parameters?.state || "").trim();
-  const geographyType = String(parameters?.geographyType || "county").trim();
-
-  if (yearStart) {
-    merged.year_start = yearStart;
+function resolveSelectedYear(rawYear, defaultYear) {
+  const parsed = parseYear(rawYear);
+  if (parsed) {
+    return parsed;
   }
-  if (yearEnd) {
-    merged.year_end = yearEnd;
-  }
-  if (state) {
-    merged.state = state;
-  }
-  if (geographyType) {
-    merged.geography_type = geographyType;
-  }
-
-  return merged;
+  return parseYear(defaultYear) || DEFAULT_YEAR;
 }
 
-function parseRequestBody(requestBody, requestBodyJson) {
-  if (requestBody && typeof requestBody === "object" && !Array.isArray(requestBody)) {
-    return sanitizeRecord(requestBody);
+function buildRequestXml({ template, selectedYear }) {
+  const parameters = [];
+  for (const parameter of template.baseParameters) {
+    parameters.push({
+      name: parameter.name,
+      values: [...parameter.values]
+    });
   }
 
-  const rawJson = String(requestBodyJson || "").trim();
-  if (!rawJson) {
-    return {};
+  parameters.push({
+    name: template.yearFilterParameter,
+    values: [String(selectedYear)]
+  });
+
+  const parameterBlocks = parameters.map((parameter) => buildParameterXml(parameter.name, parameter.values)).join("");
+  return `<request-parameters>${parameterBlocks}</request-parameters>`;
+}
+
+function buildParameterXml(name, values) {
+  const safeName = xmlEscape(name);
+  const safeValues = Array.isArray(values) ? values : [];
+  const valueBlocks = safeValues.map((value) => `<value>${xmlEscape(String(value))}</value>`).join("");
+  return `<parameter><name>${safeName}</name>${valueBlocks}</parameter>`;
+}
+
+function parseWonderRecords(rawText) {
+  const xmlRecords = parseWonderXmlRecords(rawText);
+  if (xmlRecords.length > 0) {
+    return xmlRecords;
   }
 
-  try {
-    const parsed = JSON.parse(rawJson);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return {};
+  const tsvRecords = parseTsvRecords(rawText);
+  if (tsvRecords.length > 0) {
+    return tsvRecords;
+  }
+
+  return parseCsvRecords(rawText);
+}
+
+function parseWonderXmlRecords(rawText) {
+  const text = String(rawText || "");
+  if (!text.includes("<")) {
+    return [];
+  }
+
+  const tableMatch =
+    text.match(/<data-table[^>]*>([\s\S]*?)<\/data-table>/i) ||
+    text.match(/<table[^>]*>([\s\S]*?)<\/table>/i);
+  if (!tableMatch) {
+    return [];
+  }
+
+  const tableInner = tableMatch[1];
+  const rows = [];
+  const rowMatches = tableInner.matchAll(/<r(?:\s+[^>]*)?>([\s\S]*?)<\/r>/gi);
+  for (const rowMatch of rowMatches) {
+    const rowInner = rowMatch[1];
+    const cells = [];
+    const cellMatches = rowInner.matchAll(/<c(?:\s+[^>]*)?>([\s\S]*?)<\/c>/gi);
+    for (const cellMatch of cellMatches) {
+      const value = cleanCellValue(cellMatch[1]);
+      cells.push(value);
     }
-    return sanitizeRecord(parsed);
-  } catch {
-    return {};
+    if (cells.some((cell) => cell !== "")) {
+      rows.push(cells);
+    }
   }
+
+  return rowsToRecords(rows);
 }
 
-function sanitizeRecord(record) {
-  const output = {};
-  for (const [key, value] of Object.entries(record || {})) {
-    const safeKey = String(key || "").trim();
-    if (!safeKey) {
+function parseTsvRecords(rawText) {
+  const text = String(rawText || "");
+  if (!text.includes("\t")) {
+    return [];
+  }
+
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  if (lines.length < 2) {
+    return [];
+  }
+
+  const rows = lines.map((line) => line.split("\t").map((item) => item.trim()));
+  return rowsToRecords(rows);
+}
+
+function rowsToRecords(rows) {
+  if (!Array.isArray(rows) || rows.length < 2) {
+    return [];
+  }
+
+  const header = rows[0].map((value, index) => normalizeHeader(value, index));
+  const records = [];
+
+  for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex];
+    if (!row || row.length === 0) {
       continue;
     }
-    if (value === undefined || value === null) {
-      continue;
+
+    const record = {};
+    for (let columnIndex = 0; columnIndex < header.length; columnIndex += 1) {
+      const key = header[columnIndex];
+      record[key] = row[columnIndex] ?? "";
     }
-    output[safeKey] = String(value);
+
+    if (Object.values(record).some((value) => String(value).trim() !== "")) {
+      records.push(record);
+    }
   }
-  return output;
+
+  return records;
 }
 
-function normalizeWonderRow({ row, templateId, templateLabel, parameters }) {
-  const geographyType = String(parameters?.geographyType || "county").trim();
-  const measureName = String(parameters?.measure || templateLabel || "CDC WONDER").trim();
-  const measureId = String(parameters?.measureId || templateId || "cdc_wonder").trim();
+function normalizeHeader(value, index) {
+  const cleaned = cleanCellValue(value);
+  return cleaned || `column_${index + 1}`;
+}
 
-  const value = toNumber(firstPresentValue(row, [
-    "Deaths",
-    "deaths",
-    "Count",
-    "count",
-    "Crude Rate",
-    "crude rate",
-    "Age-adjusted Rate",
-    "age-adjusted rate",
-    "Value",
-    "value"
-  ]));
+function cleanCellValue(value) {
+  const text = String(value || "");
+  const withoutTags = text.replace(/<[^>]+>/g, " ");
+  const decoded = xmlDecode(withoutTags);
+  return decoded.replace(/\s+/g, " ").trim();
+}
+
+function xmlDecode(value) {
+  return String(value || "")
+    .replace(/&quot;/g, "\"")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
+}
+
+function xmlEscape(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function extractProviderMessage(rawText) {
+  const text = String(rawText || "");
+  const patterns = [
+    /<message[^>]*>([\s\S]*?)<\/message>/i,
+    /<error-message[^>]*>([\s\S]*?)<\/error-message>/i,
+    /<title[^>]*>([\s\S]*?)<\/title>/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (!match) {
+      continue;
+    }
+    const cleaned = cleanCellValue(match[1]);
+    if (cleaned) {
+      return cleaned;
+    }
+  }
+
+  return "";
+}
+
+function normalizeWonderRow({ row, template, selectedYear }) {
+  const measureName = template.label;
+  const valueCandidate = extractNumericValue(row, template.measurePriorityKeys);
+  const year = parseYear(firstPresentValue(row, ["Year"])) || selectedYear;
+  const geographyName = firstPresentValue(row, ["Location", "State", "County", "Residence"]) || "United States";
 
   return {
     source: "cdc_wonder",
-    vintage_year: toYear(firstPresentValue(row, ["Year", "year"])),
-    data_year: toYear(firstPresentValue(row, ["Year", "year"])),
-    geography_type: geographyType,
-    geography_name: firstPresentValue(row, [
-      "County",
-      "county",
-      "County Name",
-      "county_name",
-      "Residence County",
-      "State",
-      "state"
-    ]),
-    state_fips: firstPresentValue(row, ["State Code", "state_code", "State FIPS", "state_fips"]),
-    county_fips: firstPresentValue(row, ["County Code", "county_code", "County FIPS", "county_fips"]),
-    measure_name: measureName || null,
-    measure_id: measureId || null,
-    value,
-    unit: firstPresentValue(row, ["Unit", "unit"]),
-    lower_ci: toNumber(firstPresentValue(row, ["Lower CI", "lower_ci", "Lower 95% CI"])),
-    upper_ci: toNumber(firstPresentValue(row, ["Upper CI", "upper_ci", "Upper 95% CI"])),
+    vintage_year: year,
+    data_year: year,
+    geography_type: "national",
+    geography_name: geographyName,
+    state_fips: null,
+    county_fips: null,
+    measure_name: measureName,
+    measure_id: template.id,
+    value: valueCandidate?.value ?? null,
+    unit: inferUnit(valueCandidate?.key),
+    lower_ci: toNumber(firstPresentValue(row, ["Lower 95% Confidence Limit", "Lower CI"])),
+    upper_ci: toNumber(firstPresentValue(row, ["Upper 95% Confidence Limit", "Upper CI"])),
     notes: summarizeRow(row)
   };
+}
+
+function extractNumericValue(row, preferredKeys) {
+  for (const key of preferredKeys || []) {
+    const rawValue = firstPresentValue(row, [key]);
+    const parsed = toNumber(rawValue);
+    if (parsed !== null) {
+      return { key, value: parsed };
+    }
+  }
+
+  for (const [key, rawValue] of Object.entries(row || {})) {
+    if (normalizeText(key).includes("year")) {
+      continue;
+    }
+    const parsed = toNumber(rawValue);
+    if (parsed !== null) {
+      return { key, value: parsed };
+    }
+  }
+
+  return null;
+}
+
+function inferUnit(key) {
+  const normalized = normalizeText(key);
+  if (!normalized) {
+    return null;
+  }
+  if (normalized.includes("rate")) {
+    return "rate";
+  }
+  if (normalized.includes("percent") || normalized.includes("%")) {
+    return "percent";
+  }
+  if (normalized.includes("birth") || normalized.includes("death") || normalized.includes("count")) {
+    return "count";
+  }
+  return null;
 }
 
 function summarizeRow(row) {
@@ -291,30 +450,6 @@ function firstPresentValue(row, keys) {
   }
 
   return null;
-}
-
-function toYear(value) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    return null;
-  }
-  const year = Math.floor(parsed);
-  if (year < 1900 || year > 2100) {
-    return null;
-  }
-  return year;
-}
-
-function normalizeYear(value) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    return null;
-  }
-  const year = Math.floor(parsed);
-  if (year < 1900 || year > 2100) {
-    return null;
-  }
-  return year;
 }
 
 function toNumber(value) {

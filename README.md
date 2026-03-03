@@ -142,7 +142,7 @@ Current extractor modules:
 
 - `cdc_places` (Socrata API)
 - `census_acs` (Census Data API)
-- `cdc_wonder` (template-driven execution for `wonder.cdc.gov` links; current default template targets mortality module)
+- `cdc_wonder` (preset-driven execution for `wonder.cdc.gov` links with limited inputs)
 - `tdh_death_stats` (download-index extraction plus optional tidy conversion for CSV/XLSX)
 
 Extraction API endpoints:
@@ -154,6 +154,12 @@ Extraction API endpoints:
 - `GET /api/extract/jobs/{jobId}/manifest`
 
 Every extraction run returns a downloadable data file and a reproducibility manifest containing request details and a SHA-256 hash.
+
+CDC WONDER template behavior:
+
+- Uses fixed templates only (no free-form request body knobs in UI).
+- Current presets: `mortality_county_v1` and `natality_county_v1`.
+- Inputs are intentionally limited to template selection + year for deterministic runs.
 
 TDH extractor modes:
 

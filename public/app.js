@@ -23,12 +23,16 @@ const extractPanel = document.getElementById("extract-panel");
 const extractCloseButton = document.getElementById("extract-close");
 const extractTarget = document.getElementById("extract-target");
 const extractSource = document.getElementById("extract-source");
+const extractTemplate = document.getElementById("extract-template");
 const extractMode = document.getElementById("extract-mode");
 const extractYear = document.getElementById("extract-year");
 const extractState = document.getElementById("extract-state");
 const extractMeasure = document.getElementById("extract-measure");
 const extractMaxFiles = document.getElementById("extract-max-files");
+const extractTemplateLabel = extractTemplate?.closest("label");
 const extractModeLabel = extractMode?.closest("label");
+const extractStateLabel = extractState?.closest("label");
+const extractMeasureLabel = extractMeasure?.closest("label");
 const extractMaxFilesLabel = extractMaxFiles?.closest("label");
 const extractFormat = document.getElementById("extract-format");
 const extractRunButton = document.getElementById("extract-run");
@@ -384,6 +388,9 @@ function openExtractPanel(result) {
   if (extractMode) {
     extractMode.value = "catalog";
   }
+  if (extractTemplate) {
+    extractTemplate.innerHTML = "";
+  }
   if (extractMaxFiles) {
     extractMaxFiles.value = "3";
   }
@@ -411,6 +418,21 @@ function applyExtractSourceDefaults() {
   updateExtractControlVisibility(selectedSourceId);
   const selected = activeExtractContext.extractorMap?.[selectedSourceId];
   const defaults = selected?.defaults || {};
+  const wonderTemplateOptions = Array.isArray(selected?.templateOptions) ? selected.templateOptions : [];
+
+  if (extractTemplate) {
+    extractTemplate.innerHTML = "";
+    for (const template of wonderTemplateOptions) {
+      const option = document.createElement("option");
+      option.value = String(template.id || "");
+      option.textContent = String(template.label || template.id || "Template");
+      extractTemplate.appendChild(option);
+    }
+    if (extractTemplate.options.length > 0) {
+      const defaultTemplateId = String(defaults.templateId || extractTemplate.options[0].value || "");
+      extractTemplate.value = defaultTemplateId;
+    }
+  }
 
   if (extractMode) {
     extractMode.value = String(defaults.mode || "catalog");
@@ -446,8 +468,18 @@ function applyExtractSourceDefaults() {
 
 function updateExtractControlVisibility(sourceId) {
   const isTdhSource = sourceId === "tdh_death_stats";
+  const isWonderSource = sourceId === "cdc_wonder";
+  if (extractTemplateLabel) {
+    extractTemplateLabel.classList.toggle("hidden", !isWonderSource);
+  }
   if (extractModeLabel) {
     extractModeLabel.classList.toggle("hidden", !isTdhSource);
+  }
+  if (extractStateLabel) {
+    extractStateLabel.classList.toggle("hidden", isWonderSource);
+  }
+  if (extractMeasureLabel) {
+    extractMeasureLabel.classList.toggle("hidden", isWonderSource);
   }
   if (extractMaxFilesLabel) {
     extractMaxFilesLabel.classList.toggle("hidden", !isTdhSource);
@@ -479,6 +511,7 @@ async function runExtractJob() {
   const stateValue = String(extractState?.value || "").trim();
   const measureValue = String(extractMeasure?.value || "").trim();
   const maxFilesValue = String(extractMaxFiles?.value || "").trim();
+  const templateValue = String(extractTemplate?.value || "").trim();
 
   if (yearValue) {
     parameters.year = yearValue;
@@ -507,8 +540,14 @@ async function runExtractJob() {
     delete parameters.mode;
     delete parameters.maxFiles;
     delete parameters.sectionContains;
-    if (!parameters.templateId) {
-      parameters.templateId = "mortality_county_v1";
+    delete parameters.state;
+    delete parameters.stateAbbr;
+    delete parameters.measureId;
+    delete parameters.measure;
+    parameters.templateId = templateValue || String(parameters.templateId || "mortality_county_v1");
+    if (yearValue) {
+      parameters.yearStart = yearValue;
+      parameters.yearEnd = yearValue;
     }
   }
 

@@ -17,14 +17,22 @@ async function testCdcWonderTemplateExecution() {
   let called = false;
   const fetchImpl = async (url, options) => {
     called = true;
-    assert.equal(url, "https://wonder.cdc.gov/controller/datarequest");
+    assert.equal(url, "https://wonder.cdc.gov/controller/datarequest/D76");
     assert.equal(options?.method, "POST");
-    assert.match(String(options?.body || ""), /M_1=/);
+    assert.match(String(options?.body || ""), /request_xml=/);
+    assert.match(String(options?.body || ""), /accept_datause_restrictions=true/);
 
     return createTextResponse({
       ok: true,
       status: 200,
-      body: "Year,County,Deaths,State Code,County Code\n2023,Davidson,100,47,037\n"
+      body: [
+        "<response>",
+        "  <data-table>",
+        "    <r><c>Year</c><c>Deaths</c><c>Crude Rate</c></r>",
+        "    <r><c>2023</c><c>100</c><c>12.3</c></r>",
+        "  </data-table>",
+        "</response>"
+      ].join("")
     });
   };
 
@@ -32,7 +40,6 @@ async function testCdcWonderTemplateExecution() {
     url: "https://wonder.cdc.gov/",
     parameters: {
       templateId: "mortality_county_v1",
-      geographyType: "county",
       year: 2023
     },
     fetchImpl
@@ -42,7 +49,7 @@ async function testCdcWonderTemplateExecution() {
   assert.equal(output.source, "cdc_wonder");
   assert.equal(output.rows.length, 1);
   assert.equal(output.rows[0].data_year, 2023);
-  assert.equal(output.rows[0].geography_name, "Davidson");
+  assert.equal(output.rows[0].geography_name, "United States");
   assert.equal(output.rows[0].value, 100);
 }
 
