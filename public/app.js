@@ -28,6 +28,8 @@ const extractYear = document.getElementById("extract-year");
 const extractState = document.getElementById("extract-state");
 const extractMeasure = document.getElementById("extract-measure");
 const extractMaxFiles = document.getElementById("extract-max-files");
+const extractModeLabel = extractMode?.closest("label");
+const extractMaxFilesLabel = extractMaxFiles?.closest("label");
 const extractFormat = document.getElementById("extract-format");
 const extractRunButton = document.getElementById("extract-run");
 const extractStatus = document.getElementById("extract-status");
@@ -406,6 +408,7 @@ function applyExtractSourceDefaults() {
   }
 
   const selectedSourceId = extractSource.value;
+  updateExtractControlVisibility(selectedSourceId);
   const selected = activeExtractContext.extractorMap?.[selectedSourceId];
   const defaults = selected?.defaults || {};
 
@@ -441,6 +444,16 @@ function applyExtractSourceDefaults() {
   }
 }
 
+function updateExtractControlVisibility(sourceId) {
+  const isTdhSource = sourceId === "tdh_death_stats";
+  if (extractModeLabel) {
+    extractModeLabel.classList.toggle("hidden", !isTdhSource);
+  }
+  if (extractMaxFilesLabel) {
+    extractMaxFilesLabel.classList.toggle("hidden", !isTdhSource);
+  }
+}
+
 async function runExtractJob() {
   hideError();
   if (!extractRunButton) {
@@ -458,7 +471,6 @@ async function runExtractJob() {
   const selectedSourceId = extractSource.value;
   const selected = activeExtractContext.extractorMap?.[selectedSourceId] || {};
   const outputFormat = String(extractFormat?.value || "csv");
-  const selectedMode = String(extractMode?.value || selected.defaults?.mode || "catalog");
   const parameters = {
     ...(selected.defaults || {})
   };
@@ -479,21 +491,22 @@ async function runExtractJob() {
   if (measureValue) {
     parameters.measureId = measureValue;
     parameters.measure = measureValue;
-    parameters.sectionContains = measureValue;
-  }
-  if (selectedMode) {
-    parameters.mode = selectedMode;
-  }
-  if (maxFilesValue) {
-    parameters.maxFiles = maxFilesValue;
   }
   if (selectedSourceId === "tdh_death_stats") {
+    const selectedMode = String(extractMode?.value || parameters.mode || "tidy");
     parameters.indexUrl = activeExtractContext.url;
-    if (!parameters.mode) {
-      parameters.mode = "tidy";
+    parameters.mode = selectedMode || "tidy";
+    if (measureValue) {
+      parameters.sectionContains = measureValue;
+    }
+    if (maxFilesValue) {
+      parameters.maxFiles = maxFilesValue;
     }
   }
   if (selectedSourceId === "cdc_wonder") {
+    delete parameters.mode;
+    delete parameters.maxFiles;
+    delete parameters.sectionContains;
     if (!parameters.templateId) {
       parameters.templateId = "mortality_county_v1";
     }

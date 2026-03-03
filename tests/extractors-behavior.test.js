@@ -7,6 +7,7 @@ run();
 
 async function run() {
   await testCdcWonderTemplateExecution();
+  await testCdcWonderRejectsNonWonderHost();
   await testTdhCatalogMode();
   await testTdhTidyCsvMode();
   console.log("extractors-behavior tests passed");
@@ -43,6 +44,30 @@ async function testCdcWonderTemplateExecution() {
   assert.equal(output.rows[0].data_year, 2023);
   assert.equal(output.rows[0].geography_name, "Davidson");
   assert.equal(output.rows[0].value, 100);
+}
+
+async function testCdcWonderRejectsNonWonderHost() {
+  let called = false;
+  const fetchImpl = async () => {
+    called = true;
+    throw new Error("fetch should not be called for non-wonder hosts");
+  };
+
+  await assert.rejects(
+    () =>
+      cdcWonderExtractor.extract({
+        url: "https://www.cdc.gov/nchs/data/vsrr/vsrr-038.pdf",
+        parameters: { templateId: "mortality_county_v1" },
+        fetchImpl
+      }),
+    (error) => {
+      assert.equal(error.statusCode, 400);
+      assert.match(String(error.message), /wonder\.cdc\.gov/);
+      return true;
+    }
+  );
+
+  assert.equal(called, false);
 }
 
 async function testTdhCatalogMode() {

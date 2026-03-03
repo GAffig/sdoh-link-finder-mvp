@@ -28,7 +28,7 @@ export const cdcWonderExtractor = Object.freeze({
   label: "CDC WONDER (Template)",
   method: "api_template",
   description: "Template-driven CDC WONDER extraction with reproducible query definitions.",
-  supportedDomains: Object.freeze(["wonder.cdc.gov", "cdc.gov"]),
+  supportedDomains: Object.freeze(["wonder.cdc.gov"]),
   supportedOutputFormats: Object.freeze(["csv"]),
   defaultParameters: Object.freeze({
     templateId: "mortality_county_v1"
@@ -39,7 +39,7 @@ export const cdcWonderExtractor = Object.freeze({
       return null;
     }
 
-    if (!hostMatches(host, "wonder.cdc.gov") && !hostMatches(host, "cdc.gov")) {
+    if (!hostMatches(host, "wonder.cdc.gov")) {
       return null;
     }
 
@@ -52,6 +52,14 @@ export const cdcWonderExtractor = Object.freeze({
     };
   },
   async extract({ url, parameters, fetchImpl }) {
+    const sourceHost = resolveHost(url);
+    if (!hostMatches(sourceHost, "wonder.cdc.gov")) {
+      throw createExtractorError(
+        `CDC WONDER extraction is only supported for wonder.cdc.gov links. Selected host: ${sourceHost || "unknown"}.`,
+        400
+      );
+    }
+
     const templateId = String(parameters?.templateId || "mortality_county_v1").trim();
     const template = WONDER_TEMPLATES[templateId];
     if (!template) {

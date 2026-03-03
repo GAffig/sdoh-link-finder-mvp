@@ -37,6 +37,9 @@ function testEligibilityByDomain() {
   const wonder = getEligibleExtractors({ url: "https://wonder.cdc.gov/" });
   assert.ok(wonder.some((item) => item.sourceId === "cdc_wonder"));
 
+  const genericCdc = getEligibleExtractors({ url: "https://www.cdc.gov/nchs/data/vsrr/vsrr-038.pdf" });
+  assert.ok(!genericCdc.some((item) => item.sourceId === "cdc_wonder"));
+
   const tdh = getEligibleExtractors({
     url: "https://www.tn.gov/health/health-program-areas/statistics/health-data/death-statistics.html",
     title: "Tennessee Death Statistics"

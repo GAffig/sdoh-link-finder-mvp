@@ -142,7 +142,7 @@ Current extractor modules:
 
 - `cdc_places` (Socrata API)
 - `census_acs` (Census Data API)
-- `cdc_wonder` (template-driven execution with reproducible request body metadata)
+- `cdc_wonder` (template-driven execution for `wonder.cdc.gov` links; current default template targets mortality module)
 - `tdh_death_stats` (download-index extraction plus optional tidy conversion for CSV/XLSX)
 
 Extraction API endpoints:
