@@ -20,6 +20,11 @@
             <p class="subtitle">Find trusted tables, datasets, and maps for CHNA and SDoH research.</p>
           </div>
         </div>
+        <div class="hero-strip" aria-label="Product highlights">
+          <span class="hero-pill">Priority sources first</span>
+          <span class="hero-pill">Download-ready extracts</span>
+          <span class="hero-pill">Search history saved locally</span>
+        </div>
       </header>
 
       <nav class="tabs" aria-label="Primary tabs">
@@ -40,6 +45,17 @@
             <button id="search-button" type="button">Search</button>
           </div>
           <p class="search-hint">Trusted sources only. Open any result in a new tab.</p>
+          <div class="query-presets" aria-label="Example searches">
+            <button type="button" class="query-preset" data-query-preset="uninsured rate by county Tennessee">
+              Uninsured by county
+            </button>
+            <button type="button" class="query-preset" data-query-preset="median household income Davidson County Tennessee">
+              Median household income
+            </button>
+            <button type="button" class="query-preset" data-query-preset="food insecurity by county Tennessee">
+              Food insecurity
+            </button>
+          </div>
           <details id="advanced-options" class="advanced-options">
             <summary>Advanced options</summary>
             <div class="search-options">
@@ -57,6 +73,16 @@
         <div id="error-panel" class="panel error hidden"></div>
         <div id="setup-panel" class="panel setup hidden"></div>
         <p id="result-context" class="status hidden"></p>
+        <section id="results-toolbar" class="results-toolbar hidden" aria-label="Result refinement">
+          <div class="results-toolbar-copy">
+            <p class="results-eyebrow">Refine results</p>
+            <p id="results-summary" class="results-summary"></p>
+          </div>
+          <div class="results-filter-stack">
+            <div id="result-scope-filters" class="filter-row" role="group" aria-label="Result type filters"></div>
+            <div id="result-domain-filters" class="filter-row domain-row hidden" role="group" aria-label="Source domain filters"></div>
+          </div>
+        </section>
         <div id="extract-panel" class="panel extract hidden">
           <div class="extract-header">
             <h3>Download Data</h3>

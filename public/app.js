@@ -45,12 +45,20 @@ const historyEmpty = document.getElementById("history-empty");
 const historyTable = document.getElementById("history-table");
 const historyBody = document.getElementById("history-body");
 const clearHistoryButton = document.getElementById("clear-history");
+const queryPresetButtons = document.querySelectorAll("[data-query-preset]");
+const resultsToolbar = document.getElementById("results-toolbar");
+const resultsSummary = document.getElementById("results-summary");
+const resultScopeFilters = document.getElementById("result-scope-filters");
+const resultDomainFilters = document.getElementById("result-domain-filters");
 
 let appConfig = null;
 let historyItems = loadHistory();
+let lastSearchResults = [];
 let lastRenderedResults = [];
 let activeExtractContext = null;
 let searchRequestInFlight = false;
+let activeResultScope = "all";
+let activeResultDomain = "";
 
 initialize();
 
@@ -66,6 +74,13 @@ async function initialize() {
 function bindEvents() {
   for (const button of tabButtons) {
     button.addEventListener("click", () => switchTab(button.dataset.tab));
+  }
+
+  for (const button of queryPresetButtons) {
+    button.addEventListener("click", () => {
+      queryInput.value = String(button.dataset.queryPreset || "");
+      queryInput.focus();
+    });
   }
 
   searchButton.addEventListener("click", () => runSearch());
@@ -92,6 +107,9 @@ function bindEvents() {
 
   if (resultsList) {
     resultsList.addEventListener("click", onResultsListClick);
+  }
+  if (resultsToolbar) {
+    resultsToolbar.addEventListener("click", onResultsToolbarClick);
   }
   if (extractCloseButton) {
     extractCloseButton.addEventListener("click", () => hideExtractPanel());
@@ -296,10 +314,18 @@ async function runSearch() {
 }
 
 function renderResults(results) {
-  resultsList.innerHTML = "";
-  lastRenderedResults = Array.isArray(results) ? results : [];
+  lastSearchResults = Array.isArray(results) ? results : [];
+  activeResultScope = "all";
+  activeResultDomain = "";
+  renderFilteredResults();
+}
 
-  if (lastRenderedResults.length === 0) {
+function renderFilteredResults() {
+  resultsList.innerHTML = "";
+  renderResultsToolbarState();
+
+  if (lastSearchResults.length === 0) {
+    lastRenderedResults = [];
     const item = document.createElement("li");
     item.className = "panel";
     item.textContent = "No results returned.";
@@ -307,9 +333,22 @@ function renderResults(results) {
     return;
   }
 
+  lastRenderedResults = applyResultFilters(lastSearchResults);
+  if (lastRenderedResults.length === 0) {
+    const item = document.createElement("li");
+    item.className = "panel";
+    item.textContent = "No results match the current filters.";
+    resultsList.appendChild(item);
+    return;
+  }
+
   for (const [index, result] of lastRenderedResults.entries()) {
     const li = document.createElement("li");
-    li.className = "result";
+    li.className = [
+      "result",
+      result.isPriority ? "priority-result" : "",
+      hasDownloadExtractor(result) ? "downloadable-result" : ""
+    ].filter(Boolean).join(" ");
 
     const priorityBadge = result.isPriority ? '<span class="meta-pill priority">Priority Source</span>' : "";
     const extractorCount = Array.isArray(result.extractors) ? result.extractors.length : 0;
@@ -336,15 +375,202 @@ function renderResults(results) {
         </div>
       </div>
       <p class="snippet">${escapeHtml(result.snippet || "")}</p>
-      <div>
-        <a class="open-link" href="${openUrl}" target="_blank" rel="noopener noreferrer">Open source</a>
-        ${downloadBadge}
+      <div class="result-foot">
+        <div class="result-signals">
+          ${downloadBadge}
+        </div>
+        <div class="result-actions">
+          <a class="open-link" href="${openUrl}" target="_blank" rel="noopener noreferrer">Open source</a>
+          ${downloadAction}
+        </div>
       </div>
-      ${downloadAction}
     `;
 
     resultsList.appendChild(li);
   }
+}
+
+function renderResultsToolbarState() {
+  if (!resultsToolbar || !resultsSummary || !resultScopeFilters || !resultDomainFilters) {
+    return;
+  }
+
+  if (lastSearchResults.length === 0) {
+    resultsToolbar.classList.add("hidden");
+    resultScopeFilters.innerHTML = "";
+    resultDomainFilters.innerHTML = "";
+    resultDomainFilters.classList.add("hidden");
+    resultsSummary.textContent = "";
+    return;
+  }
+
+  const filteredResults = applyResultFilters(lastSearchResults);
+  const scopeOptions = buildScopeFilterOptions(lastSearchResults);
+  const domainOptions = collectTopDomainOptions(lastSearchResults);
+
+  resultsToolbar.classList.remove("hidden");
+  resultsSummary.textContent = buildResultsSummary(lastSearchResults, filteredResults);
+  resultScopeFilters.innerHTML = scopeOptions.map((option) => buildFilterChipMarkup({
+    kind: "scope",
+    value: option.id,
+    label: option.label,
+    count: option.count,
+    active: activeResultScope === option.id,
+    disabled: option.count === 0 && activeResultScope !== option.id
+  })).join("");
+
+  if (domainOptions.length > 1) {
+    const domainButtons = [
+      buildFilterChipMarkup({
+        kind: "domain",
+        value: "",
+        label: "Any source",
+        count: lastSearchResults.length,
+        active: !activeResultDomain,
+        disabled: false
+      }),
+      ...domainOptions.map((option) => buildFilterChipMarkup({
+        kind: "domain",
+        value: option.id,
+        label: option.label,
+        count: option.count,
+        active: activeResultDomain === option.id,
+        disabled: false
+      }))
+    ];
+    resultDomainFilters.innerHTML = domainButtons.join("");
+    resultDomainFilters.classList.remove("hidden");
+  } else {
+    resultDomainFilters.innerHTML = "";
+    resultDomainFilters.classList.add("hidden");
+  }
+}
+
+function buildScopeFilterOptions(results) {
+  return [
+    { id: "all", label: "All", count: results.length },
+    {
+      id: "download",
+      label: "Download ready",
+      count: results.filter((result) => hasDownloadExtractor(result)).length
+    },
+    {
+      id: "priority",
+      label: "Priority only",
+      count: results.filter((result) => Boolean(result?.isPriority)).length
+    }
+  ];
+}
+
+function collectTopDomainOptions(results) {
+  const counts = new Map();
+  for (const result of results) {
+    const domainKey = normalizeDomainKey(result?.domain);
+    if (!domainKey) {
+      continue;
+    }
+    counts.set(domainKey, (counts.get(domainKey) || 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .sort((left, right) => {
+      if (right[1] !== left[1]) {
+        return right[1] - left[1];
+      }
+      return left[0].localeCompare(right[0]);
+    })
+    .slice(0, 4)
+    .map(([domain, count]) => ({
+      id: domain,
+      label: formatDomainLabel(domain),
+      count
+    }));
+}
+
+function buildFilterChipMarkup({ kind, value, label, count, active, disabled }) {
+  return `
+    <button
+      type="button"
+      class="filter-chip${active ? " active" : ""}"
+      data-filter-kind="${escapeAttribute(kind)}"
+      data-filter-value="${escapeAttribute(value)}"
+      aria-pressed="${active ? "true" : "false"}"
+      ${disabled ? "disabled" : ""}
+    >
+      <span class="filter-chip-label">${escapeHtml(label)}</span>
+      <span class="filter-chip-count">${Number(count || 0)}</span>
+    </button>
+  `;
+}
+
+function buildResultsSummary(allResults, filteredResults) {
+  const priorityCount = allResults.filter((result) => Boolean(result?.isPriority)).length;
+  const downloadCount = allResults.filter((result) => hasDownloadExtractor(result)).length;
+  const parts = [
+    `Showing ${filteredResults.length} of ${allResults.length} results.`,
+    `${priorityCount} priority sources.`,
+    `${downloadCount} download-ready.`
+  ];
+
+  if (activeResultScope === "download") {
+    parts.push("Filtered to download-ready links.");
+  } else if (activeResultScope === "priority") {
+    parts.push("Filtered to priority sources.");
+  }
+
+  if (activeResultDomain) {
+    parts.push(`Source focus: ${formatDomainLabel(activeResultDomain)}.`);
+  }
+
+  return parts.join(" ");
+}
+
+function applyResultFilters(results) {
+  return results.filter((result) => {
+    if (activeResultScope === "download" && !hasDownloadExtractor(result)) {
+      return false;
+    }
+    if (activeResultScope === "priority" && !result?.isPriority) {
+      return false;
+    }
+    if (activeResultDomain && normalizeDomainKey(result?.domain) !== activeResultDomain) {
+      return false;
+    }
+    return true;
+  });
+}
+
+function onResultsToolbarClick(event) {
+  const button = event.target.closest("button[data-filter-kind]");
+  if (!button) {
+    return;
+  }
+
+  const kind = String(button.dataset.filterKind || "");
+  const value = String(button.dataset.filterValue || "");
+
+  if (kind === "scope") {
+    activeResultScope = value || "all";
+  } else if (kind === "domain") {
+    activeResultDomain = value;
+  } else {
+    return;
+  }
+
+  hideExtractPanel();
+  renderFilteredResults();
+}
+
+function hasDownloadExtractor(result) {
+  return Array.isArray(result?.extractors) && result.extractors.length > 0;
+}
+
+function normalizeDomainKey(domain) {
+  return String(domain || "").trim().toLowerCase();
+}
+
+function formatDomainLabel(domain) {
+  return String(domain || "").replace(/^www\./i, "");
 }
 
 function onResultsListClick(event) {
@@ -642,10 +868,10 @@ function renderHistory() {
   for (const item of ordered) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${escapeHtml(item.query)}</td>
-      <td>${escapeHtml(formatDate(item.timestamp))}</td>
-      <td>${item.results?.length || 0}</td>
-      <td><button type="button" class="secondary" data-id="${escapeAttribute(item.id)}">Open</button></td>
+      <td data-label="Query">${escapeHtml(item.query)}</td>
+      <td data-label="Timestamp">${escapeHtml(formatDate(item.timestamp))}</td>
+      <td data-label="Results">${item.results?.length || 0}</td>
+      <td data-label="Action"><button type="button" class="secondary" data-id="${escapeAttribute(item.id)}">Open</button></td>
     `;
 
     const openButton = tr.querySelector("button");
