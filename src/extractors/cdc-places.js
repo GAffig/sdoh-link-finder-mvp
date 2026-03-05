@@ -10,7 +10,7 @@ export const cdcPlacesExtractor = Object.freeze({
   method: "api",
   description: "County-level PLACES indicators via CDC Socrata API.",
   supportedDomains: Object.freeze(["cdc.gov", "data.cdc.gov"]),
-  supportedOutputFormats: Object.freeze(["csv"]),
+  supportedOutputFormats: Object.freeze(["csv", "xlsx"]),
   defaultParameters: Object.freeze({
     datasetId: DEFAULT_DATASET_ID,
     geographyType: "county"

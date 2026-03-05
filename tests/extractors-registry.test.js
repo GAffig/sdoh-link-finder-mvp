@@ -25,6 +25,11 @@ function testCatalogIncludesExpectedSources() {
   assert.ok(ids.includes("census_acs"));
   assert.ok(ids.includes("cdc_wonder"));
   assert.ok(ids.includes("tdh_death_stats"));
+
+  for (const item of catalog) {
+    assert.ok(item.supportedOutputFormats.includes("csv"));
+    assert.ok(item.supportedOutputFormats.includes("xlsx"));
+  }
 }
 
 function testEligibilityByDomain() {

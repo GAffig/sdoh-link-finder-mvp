@@ -26,7 +26,12 @@ import {
   listExtractorCatalog,
   runExtractor
 } from "./src/extractors/registry.js";
-import { normalizeOutputFormat, rowsToCsvBuffer, sha256Hex } from "./src/extractors/helpers.js";
+import {
+  normalizeOutputFormat,
+  rowsToCsvBuffer,
+  rowsToWorkbookBuffer,
+  sha256Hex
+} from "./src/extractors/helpers.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -459,7 +464,12 @@ async function handleExtractRun(req, res) {
       return respondJson(res, 404, { error: "Extractor returned no rows for the selected parameters." });
     }
 
-    const dataBuffer = rowsToCsvBuffer(result.rows);
+    const dataBuffer = outputFormat === "xlsx"
+      ? await rowsToWorkbookBuffer(result.rows)
+      : rowsToCsvBuffer(result.rows);
+    const dataContentType = outputFormat === "xlsx"
+      ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      : "text/csv; charset=utf-8";
     const runId = randomUUID();
     const runTimestamp = new Date().toISOString();
     const fileName = buildExtractDataFileName({
@@ -490,6 +500,7 @@ async function handleExtractRun(req, res) {
       fileName,
       outputFormat,
       rowCount: result.rows.length,
+      dataContentType,
       dataBuffer,
       manifest,
       manifestBuffer
@@ -547,7 +558,13 @@ function serveExtractJobArtifact(res, jobId, artifactType) {
     );
   }
 
-  return respondBufferWithDisposition(res, 200, job.dataBuffer, "text/csv; charset=utf-8", job.fileName);
+  return respondBufferWithDisposition(
+    res,
+    200,
+    job.dataBuffer,
+    job.dataContentType || "text/csv; charset=utf-8",
+    job.fileName
+  );
 }
 
 async function serveStatic(requestPath, res) {

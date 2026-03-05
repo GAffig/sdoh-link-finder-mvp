@@ -19,7 +19,7 @@ export const tnDeathStatsExtractor = Object.freeze({
   method: "download_index",
   description: "Extracts TDH link catalogs and optionally converts downloaded XLSX/CSV files into tidy rows.",
   supportedDomains: Object.freeze(["tn.gov"]),
-  supportedOutputFormats: Object.freeze(["csv"]),
+  supportedOutputFormats: Object.freeze(["csv", "xlsx"]),
   defaultParameters: Object.freeze({
     mode: "catalog",
     includePdf: true,

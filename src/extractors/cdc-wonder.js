@@ -62,7 +62,7 @@ export const cdcWonderExtractor = Object.freeze({
   method: "api_template",
   description: "Preset CDC WONDER templates with deterministic request bodies and limited controls.",
   supportedDomains: Object.freeze(["wonder.cdc.gov"]),
-  supportedOutputFormats: Object.freeze(["csv"]),
+  supportedOutputFormats: Object.freeze(["csv", "xlsx"]),
   defaultParameters: Object.freeze({
     templateId: "mortality_county_v1",
     year: DEFAULT_YEAR

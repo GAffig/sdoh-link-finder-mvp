@@ -50,6 +50,7 @@ let appConfig = null;
 let historyItems = loadHistory();
 let lastRenderedResults = [];
 let activeExtractContext = null;
+let searchRequestInFlight = false;
 
 initialize();
 
@@ -190,6 +191,10 @@ function renderSearchConfigNote(config) {
 }
 
 async function runSearch() {
+  if (searchRequestInFlight) {
+    return;
+  }
+
   hideError();
   clearResultContext();
   hideExtractPanel();
@@ -206,6 +211,7 @@ async function runSearch() {
     return;
   }
 
+  searchRequestInFlight = true;
   setLoading(true);
   try {
     const normalizeQuery = Boolean(normalizeQueryToggle?.checked);
@@ -284,6 +290,7 @@ async function runSearch() {
   } catch (error) {
     showError(`Search request failed: ${String(error)}`);
   } finally {
+    searchRequestInFlight = false;
     setLoading(false);
   }
 }

@@ -1,5 +1,7 @@
 import { createHash } from "crypto";
 
+let cachedExcelJsModule = null;
+
 export function rowsToCsvBuffer(rows) {
   const safeRows = Array.isArray(rows) ? rows : [];
   const columns = collectColumns(safeRows);
@@ -10,6 +12,22 @@ export function rowsToCsvBuffer(rows) {
   }
 
   return Buffer.from(lines.join("\n"), "utf8");
+}
+
+export async function rowsToWorkbookBuffer(rows) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const columns = collectColumns(safeRows);
+  const ExcelJs = await loadExcelJsLibrary();
+  const workbook = new ExcelJs.Workbook();
+  const worksheet = workbook.addWorksheet("data");
+
+  worksheet.addRow(columns);
+  for (const row of safeRows) {
+    worksheet.addRow(columns.map((column) => normalizeWorkbookCell(row?.[column])));
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
 }
 
 export function collectColumns(rows) {
@@ -192,4 +210,26 @@ function escapeCsvCell(value) {
   }
 
   return `"${text.replace(/"/g, "\"\"")}"`;
+}
+
+function normalizeWorkbookCell(value) {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  if (typeof value === "number" || typeof value === "boolean" || value instanceof Date) {
+    return value;
+  }
+
+  return String(value);
+}
+
+async function loadExcelJsLibrary() {
+  if (cachedExcelJsModule) {
+    return cachedExcelJsModule;
+  }
+
+  const imported = await import("exceljs");
+  cachedExcelJsModule = imported.default || imported;
+  return cachedExcelJsModule;
 }
