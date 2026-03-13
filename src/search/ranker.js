@@ -51,7 +51,10 @@ const SEARCH_COST_MODES = {
 };
 
 const DATA_CENSUS_HOST = "data.census.gov";
+const CENSUS_HOST = "census.gov";
 const DATA_CENSUS_BONUS = 160;
+const DATA_CENSUS_INTENT_BONUS = 220;
+const BROAD_CENSUS_DATA_INTENT_PENALTY = 130;
 const DATA_ASSET_HINT_BONUS = 90;
 const DATA_FILE_EXTENSION_BONUS = 140;
 const DATA_MAP_HINT_BONUS = 45;
@@ -60,7 +63,12 @@ const PRIORITY_ASSET_QUERY_SUFFIX = "dataset table download csv xlsx";
 
 const LOCATION_SIGNAL_BONUS = 70;
 const MISSING_LOCATION_SIGNAL_PENALTY = 90;
+const COUNTY_SIGNAL_BONUS = 55;
+const MISSING_COUNTY_SIGNAL_PENALTY = 120;
 const CENSUS_WHEN_TOPIC_PENALTY = 190;
+const TOPIC_PHRASE_TITLE_BONUS = 72;
+const TOPIC_PHRASE_SNIPPET_BONUS = 36;
+const TOPIC_PHRASE_URL_BONUS = 24;
 
 const DATA_ASSET_HINTS = [
   "table",
@@ -112,7 +120,13 @@ const NON_DATA_HINTS = [
   "careers",
   "privacy",
   "terms",
-  "contact us"
+  "contact us",
+  "rehab",
+  "rehabs",
+  "detox",
+  "treatment center",
+  "recovery center",
+  "addiction treatment"
 ];
 
 const LOW_SIGNAL_TERMS = new Set([
@@ -170,8 +184,28 @@ const TOPIC_DOMAIN_BOOST_RULES = [
   },
   {
     triggerTerms: ["food", "desert", "insecurity"],
-    domains: ["ers.usda.gov", "feedingamerica.org", "tn.gov", "countyhealthrankings.org"],
-    bonus: 390
+    triggerPhrases: ["low food access", "food access", "food environment"],
+    seedPhrases: ["limited access to healthy foods", "food environment index"],
+    domainSeedPhrases: {
+      "ers.usda.gov": ["food access research atlas"]
+    },
+    domains: ["countyhealthrankings.org", "ers.usda.gov", "feedingamerica.org"],
+    bonus: 430
+  },
+  {
+    triggerPhrases: ["affordable housing", "housing cost burden", "severe housing cost burden", "rent burden"],
+    seedPhrases: ["severe housing cost burden", "severe housing problems"],
+    domains: [DATA_CENSUS_HOST, "countyhealthrankings.org", "hud.gov", "cnt.org"],
+    bonus: 450
+  },
+  {
+    triggerPhrases: ["broadband access", "internet access", "internet subscription", "digital divide"],
+    seedPhrases: ["broadband access", "internet subscription"],
+    domainSeedPhrases: {
+      "broadbandmap.fcc.gov": ["fcc national broadband map"]
+    },
+    domains: ["countyhealthrankings.org", DATA_CENSUS_HOST, "broadbandmap.fcc.gov", "ers.usda.gov"],
+    bonus: 430
   },
   {
     triggerTerms: ["transit", "transportation", "commute", "mobility"],
@@ -185,8 +219,49 @@ const TOPIC_DOMAIN_BOOST_RULES = [
   },
   {
     triggerTerms: ["childcare", "daycare", "headstart", "prekindergarten"],
+    triggerPhrases: ["child care", "child care centers"],
+    seedPhrases: ["child care centers", "early care and education"],
     domains: ["acf.hhs.gov", "hhs.gov", "tn.gov", "countyhealthrankings.org"],
     bonus: 430
+  },
+  {
+    triggerPhrases: ["primary care providers", "primary care physicians", "primary care"],
+    seedPhrases: ["primary care physicians", "other primary care providers"],
+    domains: ["countyhealthrankings.org", "cdc.gov", "healthdata.tn.gov", "cms.gov", "hhs.gov", "tn.gov"],
+    bonus: 440
+  },
+  {
+    triggerPhrases: ["behavioral health", "mental health", "behavioral health providers", "mental health providers"],
+    seedPhrases: ["behavioral health providers", "mental health providers"],
+    domains: ["countyhealthrankings.org", "cdc.gov", "hhs.gov", "samhsa.gov", "healthdata.tn.gov", "tn.gov"],
+    bonus: 440
+  },
+  {
+    triggerPhrases: ["substance abuse", "substance misuse", "drug abuse", "drug overdose", "opioid overdose", "excessive drinking", "alcohol and drug use"],
+    seedPhrases: ["drug overdose deaths", "excessive drinking"],
+    domains: ["countyhealthrankings.org", "cdc.gov", "samhsa.gov", "healthdata.tn.gov", "tn.gov", "hhs.gov"],
+    bonus: 460
+  },
+  {
+    triggerPhrases: ["substance abuse providers", "substance use providers", "addiction providers"],
+    seedPhrases: ["mental health providers", "substance use treatment"],
+    domains: ["countyhealthrankings.org", "samhsa.gov", "healthdata.tn.gov", "hhs.gov"],
+    bonus: 430
+  },
+  {
+    triggerPhrases: ["adult smoking", "current smokers", "smoking", "tobacco use"],
+    seedPhrases: ["adult smoking", "tobacco use"],
+    domains: ["countyhealthrankings.org", "healthdata.tn.gov", "cdc.gov", "hhs.gov"],
+    bonus: 430
+  },
+  {
+    triggerPhrases: ["air quality", "air pollution", "pm2.5", "particulate matter"],
+    seedPhrases: ["air pollution particulate matter", "air quality"],
+    domainSeedPhrases: {
+      "ephtracking.cdc.gov": ["air quality"]
+    },
+    domains: ["countyhealthrankings.org", "ephtracking.cdc.gov", "epa.gov", "healthdata.tn.gov", "vdh.virginia.gov"],
+    bonus: 440
   }
 ];
 
@@ -238,10 +313,19 @@ export async function runSearchPipeline({ query, provider, options = {} }) {
   let topicSeedCalls = 0;
   for (const activeRule of queryContext.activeTopicRules) {
     const limitedDomains = activeRule.domains.slice(0, costProfile.maxTopicSeedDomainsPerRule);
-    for (const domain of limitedDomains) {
-      for (const seedQuery of buildTopicSeedQueries(queryContext, activeRule, domain, query)) {
-        if (topicSeedCalls >= costProfile.maxTopicSeedCalls || requestBudget.remaining <= 1) {
-          break;
+    const domainSeedPlans = limitedDomains.map((domain) => ({
+      domain,
+      queries: buildTopicSeedQueries(queryContext, activeRule, domain, query)
+    }));
+
+    let seedDepth = 0;
+    while (topicSeedCalls < costProfile.maxTopicSeedCalls && requestBudget.remaining > 1) {
+      let executedAtDepth = false;
+
+      for (const plan of domainSeedPlans) {
+        const seedQuery = plan.queries[seedDepth];
+        if (!seedQuery) {
+          continue;
         }
 
         const domainSeedRows = await searchQueryAllow422({
@@ -252,6 +336,7 @@ export async function runSearchPipeline({ query, provider, options = {} }) {
         });
 
         topicSeedCalls += 1;
+        executedAtDepth = true;
         appendUniquePriorityRows({
           rows: domainSeedRows,
           queryContext,
@@ -261,11 +346,17 @@ export async function runSearchPipeline({ query, provider, options = {} }) {
           maxPerDomain: 2,
           bufferLimit: costProfile.stageABufferLimit
         });
+
+        if (topicSeedCalls >= costProfile.maxTopicSeedCalls || requestBudget.remaining <= 1) {
+          break;
+        }
       }
 
-      if (topicSeedCalls >= costProfile.maxTopicSeedCalls || requestBudget.remaining <= 1) {
+      if (!executedAtDepth) {
         break;
       }
+
+      seedDepth += 1;
     }
 
     if (topicSeedCalls >= costProfile.maxTopicSeedCalls || requestBudget.remaining <= 1) {
@@ -509,7 +600,12 @@ function normalizeRow(row, queryContext) {
   const lowerUrl = url.toLowerCase();
 
   const coreCoverage = computeTermCoverage(queryContext.coreTerms, lowerTitle, lowerSnippet, lowerUrl);
-  if (queryContext.coreTerms.length > 0 && coreCoverage.uniqueMatches === 0) {
+  const topicCoverage = computeTermCoverage(queryContext.topicTerms, lowerTitle, lowerSnippet, lowerUrl);
+  if (
+    queryContext.coreTerms.length > 0 &&
+    coreCoverage.uniqueMatches === 0 &&
+    topicCoverage.uniqueMatches === 0
+  ) {
     return null;
   }
 
@@ -526,7 +622,8 @@ function normalizeRow(row, queryContext) {
       lowerUrl
     },
     queryContext,
-    coreCoverage
+    coreCoverage,
+    topicCoverage
   );
 
   return {
@@ -574,7 +671,7 @@ function appendUniquePriorityRows({
   }
 }
 
-function scoreResult(result, queryContext, coreCoverage) {
+function scoreResult(result, queryContext, coreCoverage, topicCoverage) {
   let score = 0;
 
   if (result.isPriority) {
@@ -583,6 +680,11 @@ function scoreResult(result, queryContext, coreCoverage) {
 
   if (matchesHost(result.domain.toLowerCase(), DATA_CENSUS_HOST)) {
     score += DATA_CENSUS_BONUS;
+    if (queryContext.prefersDataCensus) {
+      score += DATA_CENSUS_INTENT_BONUS;
+    }
+  } else if (queryContext.prefersDataCensus && matchesHost(result.domain.toLowerCase(), CENSUS_HOST)) {
+    score -= BROAD_CENSUS_DATA_INTENT_PENALTY;
   }
 
   if (containsAnyHint(DATA_ASSET_HINTS, result.lowerUrl, result.lowerTitle, result.lowerSnippet)) {
@@ -605,6 +707,13 @@ function scoreResult(result, queryContext, coreCoverage) {
   score += coreCoverage.snippetMatches * 12;
   score += coreCoverage.urlMatches * 8;
   score += coreCoverage.uniqueMatches * 18;
+  score += topicCoverage.titleMatches * 18;
+  score += topicCoverage.snippetMatches * 9;
+  score += topicCoverage.urlMatches * 6;
+  score += topicCoverage.uniqueMatches * 14;
+  score += countPhraseMatches(queryContext.topicPhrases, result.lowerTitle) * TOPIC_PHRASE_TITLE_BONUS;
+  score += countPhraseMatches(queryContext.topicPhrases, result.lowerSnippet) * TOPIC_PHRASE_SNIPPET_BONUS;
+  score += countPhraseMatches(queryContext.topicPhrases, result.lowerUrl) * TOPIC_PHRASE_URL_BONUS;
 
   for (const term of queryContext.queryTerms) {
     if (containsToken(result.lowerTitle, term)) {
@@ -624,6 +733,15 @@ function scoreResult(result, queryContext, coreCoverage) {
       score -= MISSING_LOCATION_SIGNAL_PENALTY;
     } else {
       score += locationMatches * LOCATION_SIGNAL_BONUS;
+    }
+  }
+
+  if (queryContext.countyRequested) {
+    const countyMatches = countCountySignalMatches(result);
+    if (countyMatches === 0) {
+      score -= MISSING_COUNTY_SIGNAL_PENALTY;
+    } else {
+      score += countyMatches * COUNTY_SIGNAL_BONUS;
     }
   }
 
@@ -650,18 +768,25 @@ function compareByScore(a, b) {
 }
 
 function buildQueryContext(query) {
+  const queryText = String(query || "").toLowerCase().replace(/\s+/g, " ").trim();
   const queryTerms = tokenize(query);
+  const activeTopicRules = TOPIC_DOMAIN_BOOST_RULES.filter((rule) =>
+    isTopicRuleActive(rule, queryText, queryTerms)
+  );
   const coreTerms = queryTerms.filter((term) => !LOW_SIGNAL_TERMS.has(term));
   const locationTerms = extractLocationTerms(queryTerms);
 
   return {
+    queryText,
     queryTerms,
     coreTerms: coreTerms.length > 0 ? coreTerms : queryTerms,
+    topicTerms: extractTopicTerms(activeTopicRules),
+    topicPhrases: extractTopicPhrases(activeTopicRules),
+    countyRequested: queryTerms.includes("county") || queryTerms.includes("counties"),
+    prefersDataCensus: shouldPreferDataCensus(queryTerms),
     locationTerms,
     locationSignals: extractLocationSignals(queryTerms),
-    activeTopicRules: TOPIC_DOMAIN_BOOST_RULES.filter((rule) =>
-      rule.triggerTerms.some((term) => queryTerms.includes(term))
-    )
+    activeTopicRules
   };
 }
 
@@ -684,6 +809,10 @@ function tokenize(value) {
   }
   if (/\bhead\s+start\b/.test(lowerValue)) {
     tokenSet.add("headstart");
+  }
+  if (/\bpm\s*2\.?5\b/.test(lowerValue)) {
+    tokenSet.add("pm2");
+    tokenSet.add("pm25");
   }
 
   return [...tokenSet];
@@ -762,6 +891,22 @@ function countLocationSignalMatches(locationSignals, result) {
   return matches;
 }
 
+function countCountySignalMatches(result) {
+  let matches = 0;
+
+  if (containsToken(result.lowerTitle, "county") || containsToken(result.lowerTitle, "counties")) {
+    matches += 1;
+  }
+  if (containsToken(result.lowerSnippet, "county") || containsToken(result.lowerSnippet, "counties")) {
+    matches += 1;
+  }
+  if (containsToken(result.lowerUrl, "county") || containsToken(result.lowerUrl, "counties")) {
+    matches += 1;
+  }
+
+  return matches;
+}
+
 function getTopicDomainBoost(activeTopicRules, domain) {
   let bonus = 0;
 
@@ -793,7 +938,7 @@ function getTopicMismatchPenalty(activeTopicRules, queryTerms, domain) {
 
 function extractDomain(candidateUrl) {
   try {
-    return new URL(candidateUrl).hostname.toLowerCase();
+    return new URL(candidateUrl).hostname.toLowerCase().replace(/^www\./, "");
   } catch {
     return "";
   }
@@ -841,15 +986,34 @@ function buildDataCensusSeedQueries(query) {
 }
 
 function buildTopicSeedQueries(queryContext, rule, domain, originalQuery) {
-  const queries = [`${originalQuery} site:${domain}`];
+  const queries = [];
+  const countyHint = queryContext.queryTerms.some((term) => term === "county" || term === "counties")
+    ? "county"
+    : "";
+  const dataHint = queryContext.queryTerms.includes("data") ? "data" : "";
+  const domainSpecificPhrases = Array.isArray(rule.domainSeedPhrases?.[domain])
+    ? rule.domainSeedPhrases[domain]
+    : [];
 
-  const baseTerms = rule.triggerTerms.slice(0, 2);
+  for (const phrase of [...domainSpecificPhrases, ...(rule.seedPhrases || [])]) {
+    const seedQuery = [phrase, ...queryContext.locationTerms.slice(0, 2), countyHint, dataHint, `site:${domain}`]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    if (seedQuery) {
+      queries.push(seedQuery);
+    }
+  }
+
+  const baseTerms = (rule.triggerTerms || []).slice(0, 2);
   const locationTerms = queryContext.locationTerms.slice(0, 2);
   const focusedTerms = [...baseTerms, ...locationTerms].filter(Boolean).join(" ").trim();
 
   if (focusedTerms) {
     queries.push(`${focusedTerms} site:${domain}`);
   }
+
+  queries.push(`${originalQuery} site:${domain}`);
 
   return [...new Set(queries)];
 }
@@ -863,6 +1027,79 @@ function hasEnoughStageAResults(stageAPriorityResults, costProfile) {
 
 function countDistinctDomains(results) {
   return new Set(results.map((item) => item.domain)).size;
+}
+
+function shouldPreferDataCensus(queryTerms) {
+  const dataIntentTerms = [
+    "data",
+    "table",
+    "tables",
+    "dataset",
+    "datasets",
+    "download",
+    "income",
+    "poverty",
+    "housing",
+    "rent",
+    "commute",
+    "population",
+    "demographic",
+    "uninsured",
+    "insurance",
+    "acs",
+    "county",
+    "counties"
+  ];
+
+  return dataIntentTerms.some((term) => queryTerms.includes(term));
+}
+
+function isTopicRuleActive(rule, queryText, queryTerms) {
+  const termMatch = Array.isArray(rule.triggerTerms) &&
+    rule.triggerTerms.some((term) => queryTerms.includes(term));
+  const phraseMatch = Array.isArray(rule.triggerPhrases) &&
+    rule.triggerPhrases.some((phrase) => containsToken(queryText, phrase));
+
+  return termMatch || phraseMatch;
+}
+
+function extractTopicTerms(activeTopicRules) {
+  const topicTerms = [];
+  const seen = new Set();
+
+  for (const rule of activeTopicRules) {
+    for (const phrase of rule.seedPhrases || []) {
+      for (const term of tokenize(phrase)) {
+        if (LOW_SIGNAL_TERMS.has(term) || seen.has(term)) {
+          continue;
+        }
+
+        seen.add(term);
+        topicTerms.push(term);
+      }
+    }
+  }
+
+  return topicTerms;
+}
+
+function extractTopicPhrases(activeTopicRules) {
+  const phrases = [];
+  const seen = new Set();
+
+  for (const rule of activeTopicRules) {
+    for (const phrase of rule.seedPhrases || []) {
+      const normalized = String(phrase || "").trim().toLowerCase();
+      if (!normalized || seen.has(normalized)) {
+        continue;
+      }
+
+      seen.add(normalized);
+      phrases.push(normalized);
+    }
+  }
+
+  return phrases;
 }
 
 function limitResultsPerDomain(sortedResults, maxPerDomain, maxTotal) {
@@ -929,6 +1166,18 @@ function containsToken(haystack, term) {
 
   const pattern = new RegExp(`(^|[^a-z0-9])${escapeRegExp(term)}([^a-z0-9]|$)`);
   return pattern.test(haystack);
+}
+
+function countPhraseMatches(phrases, haystack) {
+  let matches = 0;
+
+  for (const phrase of phrases) {
+    if (phrase && containsToken(haystack, phrase)) {
+      matches += 1;
+    }
+  }
+
+  return matches;
 }
 
 function escapeRegExp(value) {

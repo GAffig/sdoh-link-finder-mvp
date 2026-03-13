@@ -41,10 +41,111 @@ export const INDICATOR_ALIAS_RULES = Object.freeze([
     triggerPhrases: Object.freeze([
       "food insecurity",
       "food insecure",
-      "food desert"
+      "food desert",
+      "low food access",
+      "food access"
     ]),
     expansionPhrases: Object.freeze([
-      "nutrition access"
+      "nutrition access",
+      "limited access to healthy foods",
+      "food environment index"
+    ])
+  }),
+  Object.freeze({
+    id: "housing_affordability",
+    triggerPhrases: Object.freeze([
+      "affordable housing",
+      "housing cost burden",
+      "severe housing cost burden",
+      "rent burden",
+      "housing affordability"
+    ]),
+    expansionPhrases: Object.freeze([
+      "severe housing cost burden",
+      "severe housing problems"
+    ])
+  }),
+  Object.freeze({
+    id: "broadband_access",
+    triggerPhrases: Object.freeze([
+      "broadband access",
+      "internet access",
+      "internet subscription",
+      "digital divide"
+    ]),
+    expansionPhrases: Object.freeze([
+      "broadband",
+      "internet subscription"
+    ])
+  }),
+  Object.freeze({
+    id: "substance_use",
+    triggerPhrases: Object.freeze([
+      "substance abuse",
+      "substance misuse",
+      "drug abuse",
+      "addiction",
+      "opioid overdose",
+      "drug overdose",
+      "excessive drinking"
+    ]),
+    expansionPhrases: Object.freeze([
+      "drug overdose deaths",
+      "alcohol and drug use",
+      "behavioral health"
+    ])
+  }),
+  Object.freeze({
+    id: "behavioral_health",
+    triggerPhrases: Object.freeze([
+      "behavioral health",
+      "mental health",
+      "behavioral health providers",
+      "mental health providers"
+    ]),
+    expansionPhrases: Object.freeze([
+      "mental health providers",
+      "behavioral health providers"
+    ])
+  }),
+  Object.freeze({
+    id: "adult_smoking",
+    triggerPhrases: Object.freeze([
+      "adult smoking",
+      "current smokers",
+      "smoking",
+      "tobacco use"
+    ]),
+    expansionPhrases: Object.freeze([
+      "adult smoking",
+      "tobacco"
+    ])
+  }),
+  Object.freeze({
+    id: "air_quality",
+    triggerPhrases: Object.freeze([
+      "air quality",
+      "air pollution",
+      "pm2.5",
+      "particulate matter"
+    ]),
+    expansionPhrases: Object.freeze([
+      "air pollution particulate matter",
+      "environmental public health tracking"
+    ])
+  }),
+  Object.freeze({
+    id: "child_care",
+    triggerPhrases: Object.freeze([
+      "child care",
+      "child care centers",
+      "day care",
+      "daycare",
+      "head start"
+    ]),
+    expansionPhrases: Object.freeze([
+      "child care centers",
+      "early care and education"
     ])
   }),
   Object.freeze({

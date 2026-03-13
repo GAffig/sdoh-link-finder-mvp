@@ -145,7 +145,7 @@ async function loadConfig() {
     appConfig = { configured: false };
     showError(`Failed to load app configuration: ${String(error)}`);
     renderSearchConfigNote(appConfig);
-    applyNormalizeQueryConfig({ configured: false, normalization: { defaultEnabled: false } });
+    applyNormalizeQueryConfig({ configured: false, normalization: { defaultEnabled: true } });
   }
 }
 

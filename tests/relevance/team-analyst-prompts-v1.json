@@ -4,7 +4,7 @@
     "query": "Insurance uninsured adult by county Tennessee Virginia",
     "topN": 8,
     "minResults": 8,
-    "requiredAnyDomains": ["countyhealthrankings.org", "census.gov", "cdc.gov", "cms.gov"],
+    "requiredAnyDomains": ["countyhealthrankings.org", "data.census.gov", "cdc.gov", "cms.gov"],
     "minPriorityInTopN": 3,
     "minDistinctDomainsTopN": 3
   },
@@ -45,11 +45,20 @@
     "minDistinctDomainsTopN": 3
   },
   {
+    "name": "Workflow - substance use data",
+    "query": "Substance abuse data for TN counties",
+    "topN": 8,
+    "minResults": 8,
+    "requiredAnyDomains": ["countyhealthrankings.org", "cdc.gov", "tn.gov"],
+    "minPriorityInTopN": 2,
+    "minDistinctDomainsTopN": 3
+  },
+  {
     "name": "Workflow - broadband access",
     "query": "Broadband access by county Tennessee Virginia",
     "topN": 8,
     "minResults": 8,
-    "requiredAnyDomains": ["census.gov", "hhs.gov", "tn.gov"],
+    "requiredAnyDomains": ["data.census.gov", "hhs.gov", "tn.gov"],
     "minPriorityInTopN": 2,
     "minDistinctDomainsTopN": 3
   },
@@ -86,6 +95,42 @@
     "topN": 8,
     "minResults": 8,
     "requiredAnyDomains": ["hhs.gov", "acf.hhs.gov", "tn.gov"],
+    "minPriorityInTopN": 2,
+    "minDistinctDomainsTopN": 3
+  },
+  {
+    "name": "Workflow - housing cost burden",
+    "query": "Housing cost burden by county Tennessee Virginia",
+    "topN": 8,
+    "minResults": 8,
+    "requiredAnyDomains": ["data.census.gov", "countyhealthrankings.org", "hud.gov"],
+    "minPriorityInTopN": 2,
+    "minDistinctDomainsTopN": 3
+  },
+  {
+    "name": "Workflow - low food access",
+    "query": "Low food access by county Tennessee Virginia",
+    "topN": 8,
+    "minResults": 8,
+    "requiredAnyDomains": ["countyhealthrankings.org", "ers.usda.gov", "feedingamerica.org"],
+    "minPriorityInTopN": 2,
+    "minDistinctDomainsTopN": 3
+  },
+  {
+    "name": "Workflow - adult smoking",
+    "query": "Adult smoking by county Tennessee Virginia",
+    "topN": 8,
+    "minResults": 8,
+    "requiredAnyDomains": ["countyhealthrankings.org", "cdc.gov", "healthdata.tn.gov"],
+    "minPriorityInTopN": 2,
+    "minDistinctDomainsTopN": 3
+  },
+  {
+    "name": "Workflow - air quality pm2.5",
+    "query": "Air quality pm2.5 by county Tennessee Virginia",
+    "topN": 8,
+    "minResults": 8,
+    "requiredAnyDomains": ["countyhealthrankings.org", "ephtracking.cdc.gov", "epa.gov", "healthdata.tn.gov"],
     "minPriorityInTopN": 2,
     "minDistinctDomainsTopN": 3
   }

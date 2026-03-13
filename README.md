@@ -48,7 +48,7 @@ Exact env vars used:
 - `BING_API_KEY`
 - `APP_BASIC_AUTH_USER` (optional HTTP Basic Auth username)
 - `APP_BASIC_AUTH_PASS` (optional HTTP Basic Auth password)
-- `NORMALIZE_QUERY` (optional default for deterministic query normalization, default `false`)
+- `NORMALIZE_QUERY` (optional override for deterministic query normalization, default `true`)
 - `PORT` (optional, default `3000`)
 - `SEARCH_COST_MODE` (optional: `economy` or `standard`, default `economy`)
 - `SEARCH_MAX_PROVIDER_CALLS` (optional override for per-search provider call limit)
@@ -121,7 +121,7 @@ This repo includes a Render Blueprint file: `render.yaml`.
    - `BRAVE_API_KEY` (preferred)
    - `SERPAPI_KEY` (recommended fallback if Brave quota/billing is exhausted)
    - Optional query assist:
-     - `NORMALIZE_QUERY=false` (default; user can toggle in Search tab)
+     - `NORMALIZE_QUERY=true` (default; user can still toggle in Search tab)
    - Optional extractor API credentials:
      - `CENSUS_API_KEY=<optional>`
      - `CDC_SOCRATA_APP_TOKEN=<optional>`
@@ -363,7 +363,6 @@ If no provider key is configured:
 
 - `cdc.gov`
 - `data.census.gov`
-- `census.gov`
 - `countyhealthrankings.org`
 - `bls.gov`
 - `ers.usda.gov`

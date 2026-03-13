@@ -2,11 +2,11 @@ import { TOKEN_EXPANSIONS } from "./normalization/abbreviations.js";
 import { INDICATOR_ALIAS_RULES } from "./normalization/indicator-aliases.js";
 import { TYPO_CORRECTIONS } from "./normalization/typos.js";
 
-export const QUERY_NORMALIZATION_VERSION = "2026-03-02-v1";
+export const QUERY_NORMALIZATION_VERSION = "2026-03-13-v3";
 const MAX_NORMALIZED_TERMS = 24;
 
 export function resolveQueryNormalizationDefault(env = process.env) {
-  return parseBooleanLike(env?.NORMALIZE_QUERY, false);
+  return parseBooleanLike(env?.NORMALIZE_QUERY, true);
 }
 
 export function resolveQueryNormalizationPreference(requestValue, fallbackValue) {

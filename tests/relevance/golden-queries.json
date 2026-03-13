@@ -4,7 +4,7 @@
     "query": "Median household income by county Tennessee",
     "topN": 8,
     "minResults": 8,
-    "requiredAnyDomains": ["data.census.gov", "census.gov"],
+    "requiredAnyDomains": ["data.census.gov"],
     "minPriorityInTopN": 3,
     "minDistinctDomainsTopN": 3
   },
@@ -13,7 +13,7 @@
     "query": "Poverty rate by county Tennessee",
     "topN": 8,
     "minResults": 8,
-    "requiredAnyDomains": ["census.gov", "countyhealthrankings.org", "ers.usda.gov"],
+    "requiredAnyDomains": ["data.census.gov", "countyhealthrankings.org", "ers.usda.gov"],
     "minPriorityInTopN": 3,
     "minDistinctDomainsTopN": 3
   },
@@ -22,7 +22,7 @@
     "query": "Child poverty by county Virginia",
     "topN": 8,
     "minResults": 8,
-    "requiredAnyDomains": ["census.gov", "countyhealthrankings.org", "hhs.gov"],
+    "requiredAnyDomains": ["data.census.gov", "countyhealthrankings.org", "hhs.gov"],
     "minPriorityInTopN": 3,
     "minDistinctDomainsTopN": 3
   },
@@ -31,7 +31,7 @@
     "query": "Uninsured rate by county Tennessee Virginia",
     "topN": 8,
     "minResults": 8,
-    "requiredAnyDomains": ["countyhealthrankings.org", "cdc.gov", "cms.gov", "census.gov"],
+    "requiredAnyDomains": ["countyhealthrankings.org", "cdc.gov", "cms.gov", "data.census.gov"],
     "minPriorityInTopN": 3,
     "minDistinctDomainsTopN": 3
   },
@@ -69,7 +69,7 @@
     "query": "School enrollment by county Tennessee",
     "topN": 8,
     "minResults": 8,
-    "requiredAnyDomains": ["nces.ed.gov", "tn.gov", "census.gov"],
+    "requiredAnyDomains": ["nces.ed.gov", "tn.gov", "data.census.gov"],
     "minPriorityInTopN": 2,
     "minDistinctDomainsTopN": 3
   },
@@ -141,7 +141,7 @@
     "query": "Housing cost burden by county",
     "topN": 8,
     "minResults": 8,
-    "requiredAnyDomains": ["hud.gov", "census.gov", "cnt.org"],
+    "requiredAnyDomains": ["hud.gov", "data.census.gov", "cnt.org"],
     "minPriorityInTopN": 2,
     "minDistinctDomainsTopN": 3
   },
@@ -150,7 +150,7 @@
     "query": "Severe rent burden by county Tennessee",
     "topN": 8,
     "minResults": 8,
-    "requiredAnyDomains": ["hud.gov", "countyhealthrankings.org", "census.gov"],
+    "requiredAnyDomains": ["hud.gov", "countyhealthrankings.org", "data.census.gov"],
     "minPriorityInTopN": 2,
     "minDistinctDomainsTopN": 3
   },
@@ -168,7 +168,7 @@
     "query": "Average commute time by county Tennessee",
     "topN": 8,
     "minResults": 8,
-    "requiredAnyDomains": ["transportation.gov", "census.gov", "cnt.org"],
+    "requiredAnyDomains": ["transportation.gov", "data.census.gov", "cnt.org"],
     "minPriorityInTopN": 2,
     "minDistinctDomainsTopN": 3
   },
@@ -213,7 +213,7 @@
     "query": "Unemployment rate by county Tennessee",
     "topN": 8,
     "minResults": 8,
-    "requiredAnyDomains": ["bls.gov", "tn.gov", "census.gov"],
+    "requiredAnyDomains": ["bls.gov", "tn.gov", "data.census.gov"],
     "minPriorityInTopN": 2,
     "minDistinctDomainsTopN": 3
   },
@@ -222,7 +222,7 @@
     "query": "Labor force participation by county Virginia",
     "topN": 8,
     "minResults": 8,
-    "requiredAnyDomains": ["bls.gov", "census.gov", "vdh.virginia.gov"],
+    "requiredAnyDomains": ["bls.gov", "data.census.gov", "vdh.virginia.gov"],
     "minPriorityInTopN": 2,
     "minDistinctDomainsTopN": 3
   },
@@ -231,7 +231,7 @@
     "query": "Rural urban classification by county Tennessee",
     "topN": 8,
     "minResults": 8,
-    "requiredAnyDomains": ["ers.usda.gov", "census.gov", "tn.gov"],
+    "requiredAnyDomains": ["ers.usda.gov", "data.census.gov", "tn.gov"],
     "minPriorityInTopN": 2,
     "minDistinctDomainsTopN": 3
   },

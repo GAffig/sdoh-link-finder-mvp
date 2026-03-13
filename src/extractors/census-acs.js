@@ -49,7 +49,7 @@ export const censusAcsExtractor = Object.freeze({
   label: "Census ACS API",
   method: "api",
   description: "County/state extracts via U.S. Census Data API (ACS).",
-  supportedDomains: Object.freeze(["census.gov", "data.census.gov"]),
+  supportedDomains: Object.freeze(["data.census.gov"]),
   supportedOutputFormats: Object.freeze(["csv", "xlsx"]),
   defaultParameters: Object.freeze({
     dataset: DEFAULT_DATASET,
@@ -63,7 +63,7 @@ export const censusAcsExtractor = Object.freeze({
       return null;
     }
 
-    if (!hostMatches(host, "census.gov") && !hostMatches(host, "data.census.gov")) {
+    if (!hostMatches(host, "data.census.gov")) {
       return null;
     }
 

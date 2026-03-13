@@ -29,7 +29,7 @@ Optional:
 - `PORT` (defaults to `3000`)
 - `APP_BASIC_AUTH_USER` (optional HTTP Basic Auth username)
 - `APP_BASIC_AUTH_PASS` (optional HTTP Basic Auth password)
-- `NORMALIZE_QUERY` (default query normalization state, default `false`)
+- `NORMALIZE_QUERY` (default query normalization state, default `true`)
 - `SEARCH_COST_MODE` (`economy` default, or `standard`)
 - `SEARCH_MAX_PROVIDER_CALLS` (override per-search call cap)
 - `SEARCH_STANDARD_MAX_PROVIDER_CALLS` (override cap for auto-upgraded `standard` reruns)
@@ -67,7 +67,7 @@ Optional:
    - Recommended for cost control:
      - `APP_BASIC_AUTH_USER=<team_user>`
      - `APP_BASIC_AUTH_PASS=<strong_password>`
-     - `NORMALIZE_QUERY=false`
+     - `NORMALIZE_QUERY=true`
      - `EXTRACT_CACHE_TTL_MS=604800000`
      - `EXTRACT_LINK_CATALOG_TTL_MS=86400000`
      - `SEARCH_COST_MODE=economy`
