@@ -360,63 +360,8 @@ button.danger {
   background: rgba(242, 210, 180, 0.68);
 }
 
-.advanced-options {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(88, 107, 93, 0.16);
-}
-
-.advanced-options > summary {
-  cursor: pointer;
-  list-style: none;
-  font-size: 0.84rem;
-  font-weight: 800;
-  color: #456157;
-}
-
-.advanced-options > summary::-webkit-details-marker {
-  display: none;
-}
-
-.advanced-options > summary::after {
-  content: "+";
-  float: right;
-  font-weight: 800;
-  color: #587567;
-}
-
-.advanced-options[open] > summary::after {
-  content: "\2212";
-}
-
-.search-options {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 10px;
-}
-
-.toggle-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 0.84rem;
-  font-weight: 700;
-  color: #395247;
-}
-
-.toggle-option input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--brand-700);
-}
-
-#normalize-query-note {
-  margin-top: 0;
-}
-
 #search-config-note {
-  margin-top: 4px;
+  margin-top: 16px;
   padding: 9px 10px;
   border-radius: 12px;
   border: 1px dashed rgba(69, 87, 74, 0.22);

@@ -121,7 +121,7 @@ This repo includes a Render Blueprint file: `render.yaml`.
    - `BRAVE_API_KEY` (preferred)
    - `SERPAPI_KEY` (recommended fallback if Brave quota/billing is exhausted)
    - Optional query assist:
-     - `NORMALIZE_QUERY=true` (default; user can still toggle in Search tab)
+     - `NORMALIZE_QUERY=true` (default; set `false` only if you want to disable normalization globally)
    - Optional extractor API credentials:
      - `CENSUS_API_KEY=<optional>`
      - `CDC_SOCRATA_APP_TOKEN=<optional>`

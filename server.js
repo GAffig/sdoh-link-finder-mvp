@@ -143,7 +143,7 @@ const server = http.createServer(async (req, res) => {
         normalization: {
           defaultEnabled: QUERY_NORMALIZATION_DEFAULT_ENABLED,
           version: QUERY_NORMALIZATION_VERSION,
-          allowPerRequestToggle: true
+          allowPerRequestToggle: false
         },
         extractors: {
           enabled: true,

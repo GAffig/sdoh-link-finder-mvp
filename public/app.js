@@ -1,5 +1,4 @@
 const HISTORY_KEY = "sodh-link-finder-history-v1";
-const NORMALIZE_QUERY_PREF_KEY = "sodh-link-finder-normalize-query-v1";
 const IS_DEBUG_MODE = new URLSearchParams(window.location.search).get("debug") === "1";
 
 const tabButtons = document.querySelectorAll(".tab");
@@ -10,9 +9,6 @@ const views = {
 
 const queryInput = document.getElementById("query-input");
 const searchButton = document.getElementById("search-button");
-const advancedOptions = document.getElementById("advanced-options");
-const normalizeQueryToggle = document.getElementById("normalize-query-toggle");
-const normalizeQueryNote = document.getElementById("normalize-query-note");
 const searchConfigNote = document.getElementById("search-config-note");
 const loadingIndicator = document.getElementById("loading-indicator");
 const errorPanel = document.getElementById("error-panel");
@@ -65,9 +61,6 @@ initialize();
 async function initialize() {
   bindEvents();
   renderHistory();
-  if (advancedOptions && IS_DEBUG_MODE) {
-    advancedOptions.open = true;
-  }
   await loadConfig();
 }
 
@@ -89,14 +82,6 @@ function bindEvents() {
       runSearch();
     }
   });
-
-  if (normalizeQueryToggle) {
-    normalizeQueryToggle.addEventListener("change", () => {
-      const enabled = Boolean(normalizeQueryToggle.checked);
-      saveNormalizeQueryPreference(enabled);
-      renderNormalizeQueryNote(enabled, appConfig?.normalization?.defaultEnabled);
-    });
-  }
 
   clearHistoryButton.addEventListener("click", () => {
     historyItems = [];
@@ -140,12 +125,10 @@ async function loadConfig() {
     appConfig = data;
     renderSetupPanel(data);
     renderSearchConfigNote(data);
-    applyNormalizeQueryConfig(data);
   } catch (error) {
     appConfig = { configured: false };
     showError(`Failed to load app configuration: ${String(error)}`);
     renderSearchConfigNote(appConfig);
-    applyNormalizeQueryConfig({ configured: false, normalization: { defaultEnabled: true } });
   }
 }
 
@@ -232,13 +215,12 @@ async function runSearch() {
   searchRequestInFlight = true;
   setLoading(true);
   try {
-    const normalizeQuery = Boolean(normalizeQueryToggle?.checked);
     const response = await fetch("/api/search", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ query, normalizeQuery })
+      body: JSON.stringify({ query })
     });
 
     const payload = await response.json();
@@ -889,11 +871,6 @@ function openHistoryItem(itemId) {
   }
 
   queryInput.value = selected.query;
-  if (normalizeQueryToggle) {
-    normalizeQueryToggle.checked = Boolean(selected?.queryNormalization?.enabled);
-    saveNormalizeQueryPreference(Boolean(normalizeQueryToggle.checked));
-    renderNormalizeQueryNote(Boolean(normalizeQueryToggle.checked), appConfig?.normalization?.defaultEnabled);
-  }
   hideExtractPanel();
   renderResults(selected.results || []);
   if (IS_DEBUG_MODE) {
@@ -977,35 +954,6 @@ function formatDuration(ms) {
   return `${hours}h`;
 }
 
-function applyNormalizeQueryConfig(config) {
-  if (!normalizeQueryToggle) {
-    return;
-  }
-
-  const defaultEnabled = Boolean(config?.normalization?.defaultEnabled);
-  const savedPreference = loadNormalizeQueryPreference();
-  const enabled = savedPreference === null ? defaultEnabled : savedPreference;
-
-  normalizeQueryToggle.checked = enabled;
-  normalizeQueryToggle.disabled = !config?.configured;
-  renderNormalizeQueryNote(enabled, defaultEnabled);
-}
-
-function renderNormalizeQueryNote(enabled, defaultEnabled) {
-  if (!normalizeQueryNote) {
-    return;
-  }
-
-  const defaultState = defaultEnabled ? "on" : "off";
-  if (enabled) {
-    normalizeQueryNote.textContent =
-      `On: typo cleanup, state expansion, and indicator alias matching (default: ${defaultState}).`;
-    return;
-  }
-
-  normalizeQueryNote.textContent = `Off. Default is ${defaultState}.`;
-}
-
 function buildNormalizationLabel({ query, normalizedQuery, queryNormalization }) {
   if (!queryNormalization?.enabled) {
     return IS_DEBUG_MODE ? "normalization: off." : "";
@@ -1021,23 +969,6 @@ function buildNormalizationLabel({ query, normalizedQuery, queryNormalization })
     ? `normalization: on (${ruleCount} rules). search query used: "${normalizedQuery}".`
     : "Query normalized for better recall.";
 }
-
-function loadNormalizeQueryPreference() {
-  try {
-    const raw = localStorage.getItem(NORMALIZE_QUERY_PREF_KEY);
-    if (raw === null) {
-      return null;
-    }
-    return raw === "1";
-  } catch {
-    return null;
-  }
-}
-
-function saveNormalizeQueryPreference(enabled) {
-  localStorage.setItem(NORMALIZE_QUERY_PREF_KEY, enabled ? "1" : "0");
-}
-
 function makeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
